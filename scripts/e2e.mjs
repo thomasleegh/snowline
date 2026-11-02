@@ -152,7 +152,7 @@ await test('every resort has a webcam link and a ticket link', async page => {
   const bad = await page.evaluate(() => RESORTS.filter(r => !r.cam || !(r.ticket || SITES[r.id])).map(r => r.id));
   assert(!bad.length, 'missing links: ' + bad.join(','));
   const best = await page.$$eval('.best .links a', as => as.map(a => a.textContent));
-  assert(best.includes('Webcams') && best.some(t => /tickets|Resort site/.test(t)), 'best bet links: ' + best.join(','));
+  assert(best.includes('Lifts open') && best.includes('Webcams') && best.some(t => /tickets|Resort site/.test(t)), 'best bet links: ' + best.join(','));
 });
 await test('rain-at-base flag appears when the snow level is above the lodge', async page => {
   assert(await page.$('.row[data-id="pal"] .rain'), 'Palisades should be flagged');
@@ -164,6 +164,7 @@ await test('detail links: webcams (OpenSnow), buy tickets, resort site', async p
   await page.click('.row[data-id="hev"]');
   const hrefs = await page.$$eval('.detail .links a', as => as.map(a => a.href));
   assert(hrefs.some(h => h === 'https://opensnow.com/location/heavenly/cams'), 'webcam link: ' + hrefs.join(' '));
+  assert(hrefs.some(h => h === 'https://opensnow.com/location/heavenly/snow-report'), 'lift status link: ' + hrefs.join(' '));
   assert(hrefs.some(h => h.includes('skiheavenly.com')), 'ticket/resort link: ' + hrefs.join(' '));
   assert(!hrefs.some(h => h.includes('google.com')), 'no search-engine stand-ins');
 });

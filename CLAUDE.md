@@ -19,7 +19,7 @@ Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right
 | Drive time | OSRM public router × departure factor + chain delay | yes | Traffic factor is a guess. Mammoth routed via Minden (Tioga closed in winter). |
 | Chain controls | Caltrans CWWP2 D3/D10 JSON | yes | Parser is defensive, format not fully verified. |
 | Ticket prices | hardcoded `price`; `ps:"listed"` = OnTheSnow weekday adult 2026-27, else estimate | no | Weekends cost more. |
-| Webcams / tickets | `cam` = OpenSnow slug (`/location/<slug>/cams`, slugs verified); `ticket` deep link or `SITES` domain | — | Links out; cams can't be embedded reliably. |
+| Webcams / lift status / tickets | `cam` = OpenSnow slug: `/location/<slug>/cams` and `/snow-report` (lifts open in season + link to the resort's official terrain status); `ticket` deep link or `SITES` domain | — | Links out; cams can't be embedded reliably. |
 | Pass coverage | hardcoded `passes` | no | 2026-27 lineups (verified 2026-11-01): Palisades is NOT on Mountain Collective; Indy = Bear Valley, Dodge Ridge, China Peak, Donner Ski Ranch, Mt. Shasta; Cali Pass = Bear Valley, Dodge Ridge, China Peak. Recheck each season. |
 
 Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar shows each feed's state and error text — never hide a failure.

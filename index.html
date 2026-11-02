@@ -213,7 +213,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "9 · Nov 1";
+const BUILD = "10 · Nov 1";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
 // lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
 // passes: 2026-27 lineups. price: ps:"listed" = OnTheSnow weekday adult price, otherwise a peak-weekend estimate.
@@ -417,6 +417,8 @@ function loadAll(force){
 
 // ---------- Model ----------
 const camUrl = r => `https://opensnow.com/location/${r.cam}/cams`;
+// OpenSnow snow report: lifts open in season + "Terrain Status" link to the resort's official lift page
+const liftUrl = r => `https://opensnow.com/location/${r.cam}/snow-report`;
 const ticketUrl = r => `https://${r.ticket || SITES[r.id]}`;
 function confidence(sn, st){
   if(!sn) return null;
@@ -525,7 +527,7 @@ function render(){
       <div class="stat"><b>${fmt(top.drive)}</b><small>${top.chain?`Drive R${top.chain}`:"Drive"}</small></div>
       <div class="stat">${top.covered?`<b class="onpass">On pass</b><small>${top.passes.filter(p=>S.owned.includes(p))[0]}</small>`:`<b>$${top.price}</b><small>Ticket</small>`}</div>
     </div>
-    <div class="links" style="grid-column:1/-1;margin:0"><a href="${camUrl(top)}" target="_blank" rel="noopener">Webcams</a><a href="${ticketUrl(top)}" target="_blank" rel="noopener">${top.covered?"Resort site":"Buy tickets"}</a></div>`
+    <div class="links" style="grid-column:1/-1;margin:0"><a href="${liftUrl(top)}" target="_blank" rel="noopener">Lifts open</a><a href="${camUrl(top)}" target="_blank" rel="noopener">Webcams</a><a href="${ticketUrl(top)}" target="_blank" rel="noopener">${top.covered?"Resort site":"Buy tickets"}</a></div>`
     : `<span class="tag">Best bet</span><div class="why">Waiting for snow and route data…</div>`;
 
   const chainCell = r => r.chain ? `<span class="chain R${r.chain}">R${r.chain}</span>` : "";
@@ -554,6 +556,7 @@ function render(){
           Depth change: <b>${r.st.d24==null?"—":(r.st.d24>0?"+":"")+r.st.d24+'"'}</b> 24h · <b>${r.st.d72==null?"—":(r.st.d72>0?"+":"")+r.st.d72+'"'}</b> 72h · reading ${r.st.date}</div>`
         : `<div class="obs">${LIVE.feeds.stations==="err"?"Station feed unavailable.":LIVE.stations?"No SNOTEL station within 30 km.":"Loading…"}</div>`}
         <h3>Live from the mountain</h3><div class="links">
+          <a href="${liftUrl(r)}" target="_blank" rel="noopener">Lifts open</a>
           <a href="${camUrl(r)}" target="_blank" rel="noopener">Webcams</a>
           <a href="${ticketUrl(r)}" target="_blank" rel="noopener">Buy tickets</a>
           <a href="https://${SITES[r.id]}" target="_blank" rel="noopener">Resort site</a>
