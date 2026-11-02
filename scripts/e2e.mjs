@@ -24,12 +24,11 @@ const server = http.createServer((req, res) => {
 const BASE = `http://localhost:${server.address().port}/`;
 
 // ---------- mock data ----------
-const RESORT_COUNT = 11;
-function meteo(){
+function meteo(n){
   const hours = [], t0 = new Date(Date.now() - 7*864e5); t0.setUTCMinutes(0,0,0);
   for(let i=0;i<24*9;i++) hours.push(new Date(t0.getTime()+i*3600e3-8*3600e3).toISOString().slice(0,13)+':00');
   const days = [...new Set(hours.map(h=>h.slice(0,10)))];
-  return Array.from({length:RESORT_COUNT}, (_,i)=>({
+  return Array.from({length:n}, (_,i)=>({
     utc_offset_seconds:-28800,
     hourly_units:{snowfall:'inch',snow_depth:'ft',precipitation:'inch',freezing_level_height:'m'},
     daily_units:{snowfall_sum:'inch'},
@@ -58,9 +57,9 @@ async function mockFeeds(page, mode='ok'){
     if(mode==='blocked') return route.abort('failed');
     if(u.includes('open-meteo')){
       if(mode==='om400' && u.includes('freezing_level_height')) return J({error:true, reason:'invalid variable'}, 400);
-      return J(meteo());
+      return J(meteo(new URL(u).searchParams.get('latitude').split(',').length));
     }
-    if(u.includes('/table/')) return J({code:'Ok', durations:[[0,12000,12300,11400,11100,12900,12600,14400,15000,12300,11700]]});
+    if(u.includes('/table/')){ const n = u.split('/table/v1/driving/')[1].split('?')[0].split(';').length; return J({code:'Ok', durations:[Array.from({length:n},(_,k)=>k?11000+k*300:0)]}); }
     if(u.includes('/route/')) return J({code:'Ok', routes:[{duration:24000}]});
     if(u.includes('cwwp2')) return J({data:[{cc:{location:{route:'I-80'}, statusData:{status:'R-2 Chains required'}}}]});
     if(u.includes('/stations?')) return J(STATIONS);
@@ -118,17 +117,42 @@ await test('build number shows so the phone can confirm an update landed', async
 });
 
 // ---------- data shown ----------
-await test('every resort shows a condition badge and confidence chip', async page => {
-  const n = await page.$$eval('.row[data-id]', rows => rows.filter(r => r.querySelector('.cond') && r.querySelector('.conf')).length);
-  assert(n === 11, `only ${n}/11 resorts have both badges`);
+await test('all 19 resorts listed, each with a condition badge', async page => {
+  const n = await page.$$eval('.row[data-id]', rows => rows.filter(r => r.querySelector('.cond')).length);
+  assert(n === 19, `expected 19 resorts with a condition, got ${n}`);
+  for(const id of ['dod','chp','dsr','sod','hom','dmp','jun','bdg','sha']) assert(await page.$(`.row[data-id="${id}"]`), 'missing resort ' + id);
 });
-await test('station-backed resort explains its confidence; others say model only', async page => {
+await test('confidence: only "Model only" is flagged, no High/Medium/Low chips (2026-11-01)', async page => {
+  const labels = await page.$$eval('.conf', els => els.map(e => e.textContent.trim()));
+  assert(!labels.some(t => /High|Med|Low conf/i.test(t)), 'found a confidence level chip: ' + labels.join(','));
+  assert(/Model only/.test(await page.textContent('.row[data-id="kir"]')), 'Kirkwood (no station in mock) should say Model only');
+  assert(!/Model only/.test(await page.textContent('.row[data-id="pal"]')), 'Palisades has a station, should not be flagged');
+});
+await test('measured station data shows in the detail', async page => {
   await page.click('.row[data-id="pal"]');
   const d = await page.textContent('.detail');
   assert(/Squaw Valley G\.C\./.test(d) && /on the ground/.test(d), 'Palisades detail should show the measured station');
-  assert(/confidence|conf\./i.test(d), 'confidence explanation missing');
-  const kir = await page.textContent('.row[data-id="kir"] .conf');
-  assert(/Model only/.test(kir), 'Kirkwood has no station in the mock, should say Model only: ' + kir);
+});
+await test('unreliable resorts are labeled (Homewood, Badger Pass)', async page => {
+  assert(/Opening not announced/.test(await page.textContent('.row[data-id="hom"]')), 'Homewood flag missing');
+  assert(/good snow years/.test(await page.textContent('.row[data-id="bdg"]')), 'Badger Pass flag missing');
+});
+await test('defaults: no passes selected; departures Fri 3 pm, Sat 5 am, Weekday AM', async page => {
+  const pressed = await page.$$eval('#passes button[aria-pressed="true"]', b => b.length);
+  assert(pressed === 0, `${pressed} passes selected by default`);
+  const order = await page.$$eval('#when button', b => b.map(x => x.textContent.trim()));
+  assert(order.join('|') === 'Fri 3 pm|Sat 5 am|Weekday AM', 'departure order: ' + order.join('|'));
+});
+await test('pass coverage 2026-27: Dodge Ridge on Indy + Cali Pass; Palisades not on Mountain Collective', async page => {
+  const dod = await page.textContent('.row[data-id="dod"] .rmeta');
+  assert(/Indy/.test(dod) && /Cali Pass/.test(dod), 'Dodge Ridge passes: ' + dod);
+  assert(!/Mountain Collective/.test(await page.textContent('.row[data-id="pal"] .rmeta')), 'Palisades should not list Mountain Collective');
+});
+await test('every resort has a webcam link and a ticket link', async page => {
+  const bad = await page.evaluate(() => RESORTS.filter(r => !r.cam || !(r.ticket || SITES[r.id])).map(r => r.id));
+  assert(!bad.length, 'missing links: ' + bad.join(','));
+  const best = await page.$$eval('.best .links a', as => as.map(a => a.textContent));
+  assert(best.includes('Webcams') && best.some(t => /tickets|Resort site/.test(t)), 'best bet links: ' + best.join(','));
 });
 await test('rain-at-base flag appears when the snow level is above the lodge', async page => {
   assert(await page.$('.row[data-id="pal"] .rain'), 'Palisades should be flagged');
@@ -136,23 +160,24 @@ await test('rain-at-base flag appears when the snow level is above the lodge', a
 await test('chain control from Caltrans shows on I-80 resorts', async page => {
   assert(/R2/.test(await page.textContent('.row[data-id="sug"] .c-drive')), 'Sugar Bowl (I-80) should show R2');
 });
-await test('live links open the resort site and snow report', async page => {
+await test('detail links: webcams (OpenSnow), buy tickets, resort site', async page => {
   await page.click('.row[data-id="hev"]');
   const hrefs = await page.$$eval('.detail .links a', as => as.map(a => a.href));
-  assert(hrefs.some(h => h.includes('skiheavenly.com')) && hrefs.some(h => /snow%20report|snow\+report/.test(h)), hrefs.join(' '));
+  assert(hrefs.some(h => h === 'https://opensnow.com/location/heavenly/cams'), 'webcam link: ' + hrefs.join(' '));
+  assert(hrefs.some(h => h.includes('skiheavenly.com')), 'ticket/resort link: ' + hrefs.join(' '));
+  assert(!hrefs.some(h => h.includes('google.com')), 'no search-engine stand-ins');
 });
 
 // ---------- sorting ----------
 await test('phone sort: price low to high, then flip', async page => {
   await page.selectOption('#msort', 'price');
   if(!/Low/.test(await page.textContent('#mdir'))) await page.click('#mdir');
-  // default pass is Ikon: on-pass resorts cost $0 and come first, then the cheapest day ticket (Boreal $119)
+  // no passes by default: cheapest day ticket first (Badger Pass $64, then Soda Springs $89)
   const order = await page.$$eval('.row[data-id]', rs => rs.map(r => r.dataset.id));
-  assert(['mam','pal','sat'].includes(order[0]), 'an Ikon resort should be first, got ' + order[0]);
-  assert(order[3] === 'bor', 'cheapest day ticket (Boreal) should follow the 3 Ikon resorts, got ' + order.join(','));
+  assert(order[0] === 'bdg' && order[1] === 'sod', 'cheapest first, got ' + order.slice(0,3).join(','));
   await page.click('#mdir');
   const top = await page.getAttribute('.row[data-id]', 'data-id');
-  assert(top !== 'bor', 'flipping direction should change the order');
+  assert(top !== 'bdg', 'flipping direction should change the order');
 });
 await test('desktop: clicking a column header sorts, clicking again flips', async page => {
   await page.click('.th[data-k="drive"]');

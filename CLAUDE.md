@@ -1,6 +1,6 @@
 # Snowline
 
-Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right now. Fresh snow, drive time, chain controls, ticket price and pass coverage for 11 resorts (Tahoe, Donner, Carson/Ebbetts/Sonora passes, Mammoth). Thomas uses it on his iPhone home screen.
+Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right now. Fresh snow, drive time, chain controls, ticket price and pass coverage for 19 resorts (Tahoe, Donner Summit, Carson/Ebbetts/Sonora passes, Yosemite, China Peak, Mammoth/June, Mt. Shasta). Thomas uses it on his iPhone home screen.
 
 ## Stack & files
 - Single-file app: `index.html` (vanilla JS, no build step, no dependencies).
@@ -15,11 +15,12 @@ Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right
 |---|---|---|---|
 | 24h/72h snowfall, 7-day chart, modeled base | Open-Meteo forecast API at each resort's mid-mountain elevation | yes | Model, not measured. Retries without rain fields if the API rejects them. |
 | Rain at base | Open-Meteo freezing level − 300 m vs `baseElev`, next 24h with precip | yes | Rule of thumb. |
-| Measured snow depth + confidence | NRCS SNOTEL (`awdbRestApi/services/v1`), nearest station within 30 km | yes | Kirkwood, Bear Valley, Dodge Ridge, Mammoth usually have none → "Model only". CDEC stations would fill that gap. |
+| Measured snow depth (+ "Model only" flag when no station) | NRCS SNOTEL (`awdbRestApi/services/v1`), nearest station within 30 km | yes | Kirkwood, Bear Valley, Dodge Ridge, Mammoth usually have none → "Model only". CDEC stations would fill that gap. |
 | Drive time | OSRM public router × departure factor + chain delay | yes | Traffic factor is a guess. Mammoth routed via Minden (Tioga closed in winter). |
 | Chain controls | Caltrans CWWP2 D3/D10 JSON | yes | Parser is defensive, format not fully verified. |
-| Ticket prices | hardcoded `price` per resort | no | Peak-weekend walk-up estimates. |
-| Pass coverage | hardcoded `passes` | no | 2025-26 lineups; recheck each season. |
+| Ticket prices | hardcoded `price`; `ps:"listed"` = OnTheSnow weekday adult 2026-27, else estimate | no | Weekends cost more. |
+| Webcams / tickets | `cam` = OpenSnow slug (`/location/<slug>/cams`, slugs verified); `ticket` deep link or `SITES` domain | — | Links out; cams can't be embedded reliably. |
+| Pass coverage | hardcoded `passes` | no | 2026-27 lineups (verified 2026-11-01): Palisades is NOT on Mountain Collective; Indy = Bear Valley, Dodge Ridge, China Peak, Donner Ski Ranch, Mt. Shasta; Cali Pass = Bear Valley, Dodge Ridge, China Peak. Recheck each season. |
 
 Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar shows each feed's state and error text — never hide a failure.
 
@@ -29,6 +30,11 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 3. Test at 390×844 first. iOS Safari is the target.
 4. Honest data: label models as models, estimates as estimates, show where a number came from.
 5. **Wrap-up** lists what changed, what to tap on the phone, and what tests covered vs. what only the real phone can confirm.
+
+## User decisions (2026-11-01)
+- No High/Medium/Low confidence chips: a recommendation is assumed to be as good as its data. Only flag "Model only" (no station within 30 km) and unreliable openings (`flag`).
+- Passes start unselected. Departure order: Fri 3 pm, Sat 5 am, Weekday AM.
+- Tahoe Donner and Granlibakken left out (small beginner hills).
 
 ## Previously fixed bugs (don't regress — each has a test)
 - "No live data" banner always visible: standalone page lacked `[hidden]{display:none!important}` and `.key{display:flex}` overrode `hidden`.

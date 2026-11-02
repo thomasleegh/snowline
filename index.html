@@ -128,7 +128,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
   .row .num{font-size:16px}
   .row .cell{align-self:start}
   .rname{font-size:1.3rem}
-  .m-only{display:inline-flex}
+  .m-only{display:inline-flex;gap:4px;flex-wrap:wrap}
   .detail{grid-template-columns:1fr}
 }
 .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
@@ -196,7 +196,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
         <li><b>Snow</b>: Open-Meteo weather model at each resort's mid-mountain elevation. 24h and 72h are rolling hourly sums; base is modeled snow depth. Snow level is the forecast freezing level minus ~1,000 ft. <span>It's a model, not the resort's stake, so expect it to differ from the resort report.</span></li>
         <li><b>Drive</b>: OSRM road routing from your origin (free-flow time) × your departure traffic factor + chain delay. Mammoth is routed via Minden, since Tioga closes in winter. <span>The traffic factor is an estimate; no free live-traffic API exists.</span></li>
         <li><b>Chains</b>: Caltrans CWWP2 chain-control feed for I-80, US-50, CA-88, CA-4 and CA-108. R1 adds ~15 min, R2 ~35, R3 ~60.</li>
-        <li><b>Price</b>: estimated peak-weekend walk-up adult ticket. No resort publishes a price API.</li>
+        <li><b>Price</b>: "listed" = adult weekday price listed on OnTheSnow for 2026-27; "est." = my estimate. Weekends and holidays cost more. No resort publishes a price feed.</li>
         <li><b>Confidence</b>: compares the model's 72h snowfall with the measured snow-depth rise at the nearest NRCS SNOTEL station within 30 km. Agreement = High, same direction = Medium, disagreement or no station = Low. Fresh snow settles, so depth usually rises 60–90% of what fell.</li>
         <li><b>Passes</b>: 2025-26 lineups. Confirm 2026-27 before relying on them.</li>
       </ol>
@@ -213,34 +213,43 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "8 · Nov 1";
-const PASSES = ["Ikon","Epic","Mountain Collective","Indy"];
-// lat/lon near mid-mountain; elev in meters for the snow model; road = parking-lot point for routing
+const BUILD = "9 · Nov 1";
+const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
+// lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
+// passes: 2026-27 lineups. price: ps:"listed" = OnTheSnow weekday adult price, otherwise a peak-weekend estimate.
 const RESORTS = [
-  {id:"pal",baseElev:1890,name:"Palisades Tahoe",area:"North Lake · Olympic Valley",corr:"I80",passes:["Ikon","Mountain Collective"],lat:39.192,lon:-120.258,elev:2300,road:[39.1968,-120.2354],price:259,fb:225},
-  {id:"nst",baseElev:1930,name:"Northstar",area:"North Lake · Truckee",corr:"I80",passes:["Epic"],lat:39.262,lon:-120.130,elev:2400,road:[39.2746,-120.1210],price:279,fb:230},
-  {id:"sug",baseElev:2100,name:"Sugar Bowl",area:"Donner Summit",corr:"I80",passes:["Mountain Collective"],lat:39.292,lon:-120.348,elev:2300,road:[39.3039,-120.3355],price:209,fb:200},
-  {id:"bor",baseElev:2200,name:"Boreal",area:"Donner Summit",corr:"I80",passes:[],lat:39.331,lon:-120.352,elev:2200,road:[39.3364,-120.3497],price:119,fb:195},
-  {id:"kir",baseElev:2380,name:"Kirkwood",area:"Carson Pass",corr:"SR88",passes:["Epic"],lat:38.672,lon:-120.070,elev:2500,road:[38.6847,-120.0652],price:199,fb:220},
-  {id:"sat",baseElev:2025,name:"Sierra-at-Tahoe",area:"Echo Summit",corr:"US50",passes:["Ikon"],lat:38.794,lon:-120.082,elev:2300,road:[38.7990,-120.0809],price:179,fb:220},
-  {id:"hev",baseElev:1990,name:"Heavenly",area:"South Lake Tahoe",corr:"US50",passes:["Epic"],lat:38.926,lon:-119.906,elev:2700,road:[38.9353,-119.9400],price:289,fb:250},
-  {id:"ros",baseElev:2520,name:"Mt. Rose",area:"Reno side · via I-80",corr:"I80",passes:[],lat:39.318,lon:-119.880,elev:2600,road:[39.3150,-119.8850],price:189,fb:260},
-  {id:"bvl",baseElev:2010,name:"Bear Valley",area:"Ebbetts Pass · Hwy 4",corr:"SR4",passes:[],lat:38.475,lon:-120.033,elev:2300,road:[38.4680,-120.0400],price:139,fb:210},
-  {id:"dod",baseElev:2010,name:"Dodge Ridge",area:"Sonora Pass · Hwy 108",corr:"SR108",passes:[],lat:38.182,lon:-119.953,elev:2300,road:[38.1880,-119.9570],price:129,fb:200},
-  {id:"mam",baseElev:2424,name:"Mammoth",area:"Eastern Sierra · via US-50 & 395",corr:"US50",passes:["Ikon"],lat:37.635,lon:-119.030,elev:2900,road:[37.6510,-119.0270],price:239,fb:410,via:[38.9541,-119.7660]},
+  {id:"pal",baseElev:1890,name:"Palisades Tahoe",area:"North Lake · Olympic Valley",corr:"I80",passes:["Ikon"],lat:39.192,lon:-120.258,elev:2300,road:[39.1968,-120.2354],price:269,ps:"listed",fb:225,cam:"palisadestahoe"},
+  {id:"nst",baseElev:1930,name:"Northstar",area:"North Lake · Truckee",corr:"I80",passes:["Epic"],lat:39.262,lon:-120.130,elev:2400,road:[39.2746,-120.1210],price:237,ps:"listed",fb:230,cam:"northstar"},
+  {id:"sug",baseElev:2100,name:"Sugar Bowl",area:"Donner Summit",corr:"I80",passes:["Mountain Collective"],lat:39.292,lon:-120.348,elev:2300,road:[39.3039,-120.3355],price:249,ps:"listed",fb:200,cam:"sugarbowl"},
+  {id:"bor",baseElev:2200,name:"Boreal",area:"Donner Summit",corr:"I80",passes:[],lat:39.331,lon:-120.352,elev:2200,road:[39.3364,-120.3497],price:144,ps:"listed",fb:195,cam:"boreal"},
+  {id:"sod",baseElev:2042,name:"Soda Springs",area:"Donner Summit · beginner-friendly",corr:"I80",passes:[],lat:39.322,lon:-120.380,elev:2100,road:[39.3224,-120.3794],price:89,ps:"listed",fb:200,cam:"sodasprings",ticket:"onthesnow.com/california/soda-springs/lift-tickets"},
+  {id:"dsr",baseElev:2143,name:"Donner Ski Ranch",area:"Donner Summit",corr:"I80",passes:["Indy"],lat:39.318,lon:-120.330,elev:2250,road:[39.3183,-120.3296],price:119,ps:"listed",fb:200,cam:"donnerskiranch",ticket:"onthesnow.com/california/donner-ski-ranch/lift-tickets"},
+  {id:"hom",baseElev:1899,name:"Homewood",area:"West Shore · opening TBD for 2026-27",corr:"I80",passes:[],lat:39.085,lon:-120.165,elev:2150,road:[39.0858,-120.1601],price:139,fb:235,cam:"homewood",site:"skihomewood.com",flag:"Opening not announced"},
+  {id:"dmp",baseElev:2042,name:"Diamond Peak",area:"Incline Village · NV",corr:"I80",passes:[],lat:39.254,lon:-119.920,elev:2300,road:[39.2545,-119.9227],price:149,fb:245,cam:"diamondpeak",site:"diamondpeak.com",ticket:"www.diamondpeak.com/tickets-passes-rentals/lift-tickets/"},
+  {id:"ros",baseElev:2520,name:"Mt. Rose",area:"Reno side · via I-80",corr:"I80",passes:[],lat:39.318,lon:-119.880,elev:2600,road:[39.3150,-119.8850],price:189,fb:260,cam:"mtrose"},
+  {id:"kir",baseElev:2380,name:"Kirkwood",area:"Carson Pass",corr:"SR88",passes:["Epic"],lat:38.672,lon:-120.070,elev:2500,road:[38.6847,-120.0652],price:199,fb:220,cam:"kirkwood"},
+  {id:"sat",baseElev:2025,name:"Sierra-at-Tahoe",area:"Echo Summit · Ikon days limited",corr:"US50",passes:["Ikon"],lat:38.794,lon:-120.082,elev:2300,road:[38.7990,-120.0809],price:150,ps:"listed",fb:220,cam:"sierraattahoe"},
+  {id:"hev",baseElev:1990,name:"Heavenly",area:"South Lake Tahoe",corr:"US50",passes:["Epic"],lat:38.926,lon:-119.906,elev:2700,road:[38.9353,-119.9400],price:289,fb:250,cam:"heavenly"},
+  {id:"bvl",baseElev:2010,name:"Bear Valley",area:"Ebbetts Pass · Hwy 4",corr:"SR4",passes:["Indy","Cali Pass"],lat:38.475,lon:-120.033,elev:2300,road:[38.4680,-120.0400],price:139,ps:"listed",fb:210,cam:"bearvalley"},
+  {id:"dod",baseElev:2010,name:"Dodge Ridge",area:"Sonora Pass · Hwy 108 · closest to the Bay",corr:"SR108",passes:["Indy","Cali Pass"],lat:38.182,lon:-119.953,elev:2300,road:[38.1880,-119.9570],price:159,ps:"listed",fb:200,cam:"dodgeridge"},
+  {id:"bdg",baseElev:2195,name:"Badger Pass",area:"Yosemite · park entry fee · opens irregularly",corr:"SR41",passes:[],lat:37.662,lon:-119.663,elev:2300,road:[37.6630,-119.6633],price:64,ps:"listed",fb:250,cam:"badgerpass",site:"travelyosemite.com/winter/badger-pass-ski-area/",flag:"Opens only in good snow years"},
+  {id:"chp",baseElev:2143,name:"China Peak",area:"Huntington Lake · via Fresno",corr:"SR168",passes:["Indy","Cali Pass"],lat:37.236,lon:-119.157,elev:2450,road:[37.2353,-119.1551],price:119,ps:"listed",fb:270,cam:"chinapeak",ticket:"onthesnow.com/california/ski-china-peak/lift-tickets"},
+  {id:"mam",baseElev:2424,name:"Mammoth",area:"Eastern Sierra · via US-50 & 395",corr:"US50",passes:["Ikon"],lat:37.635,lon:-119.030,elev:2900,road:[37.6510,-119.0270],price:239,fb:410,via:[38.9541,-119.7660],cam:"mammothmountain"},
+  {id:"jun",baseElev:2300,name:"June Mountain",area:"Eastern Sierra · near Mammoth",corr:"US50",passes:["Ikon"],lat:37.767,lon:-119.090,elev:2650,road:[37.7678,-119.0906],price:129,fb:400,via:[38.9541,-119.7660],cam:"junemountain",site:"junemountain.com"},
+  {id:"sha",baseElev:1676,name:"Mt. Shasta Ski Park",area:"Far north · I-5",corr:"I5",passes:["Indy"],lat:41.316,lon:-122.203,elev:1900,road:[41.3197,-122.2032],price:99,ps:"listed",fb:300,cam:"mtshastaskipark",ticket:"onthesnow.com/california/mount-shasta-board-ski-park/lift-tickets"},
 ];
-const SITES = {pal:"palisadestahoe.com",nst:"northstarcalifornia.com",sug:"sugarbowl.com",bor:"rideboreal.com",kir:"kirkwood.com",sat:"sierraattahoe.com",hev:"skiheavenly.com",ros:"skirose.com",bvl:"bearvalley.com",dod:"dodgeridge.com",mam:"mammothmountain.com"};
+const SITES = {hom:"skihomewood.com",dmp:"diamondpeak.com",bdg:"travelyosemite.com/winter/badger-pass-ski-area/",jun:"junemountain.com",pal:"palisadestahoe.com",nst:"northstarcalifornia.com",sug:"sugarbowl.com",bor:"rideboreal.com",kir:"kirkwood.com",sat:"sierraattahoe.com",hev:"skiheavenly.com",ros:"skirose.com",bvl:"bearvalley.com",dod:"dodgeridge.com",mam:"mammothmountain.com"};
 const ORIGINS = {pa:[37.4419,-122.1430],sf:[37.7749,-122.4194],oak:[37.8044,-122.2712],sj:[37.3382,-121.8863]};
-const CORRIDOR = {I80:"I-80 over Donner",US50:"US-50 over Echo",SR88:"CA-88 over Carson",SR4:"CA-4 to Arnold",SR108:"CA-108 to Pinecrest"};
+const CORRIDOR = {I80:"I-80 over Donner",US50:"US-50 over Echo",SR88:"CA-88 over Carson",SR4:"CA-4 to Arnold",SR108:"CA-108 to Pinecrest",SR168:"CA-168 to Shaver Lake",SR41:"CA-41 into Yosemite",I5:"I-5 north to Mt. Shasta"};
 const CHAIN_MIN = {1:15,2:35,3:60};
-const WHEN = [{id:"mid",label:"Weekday AM",f:1.0},{id:"fri",label:"Fri 3 pm",f:1.45},{id:"sat",baseElev:2025,label:"Sat 5 am",f:1.05}];
+const WHEN = [{id:"fri",label:"Fri 3 pm",f:1.45},{id:"sat",label:"Sat 5 am",f:1.05},{id:"mid",label:"Weekday AM",f:1.0}];
 const SORTS = [{id:"score",label:"Worth it"},{id:"cond",label:"Conditions"},{id:"fresh",label:"Fresh 72h"},{id:"drive",label:"Drive"},{id:"price",label:"Price"}];
 const DIRS = [{id:"asc",label:"Low → high"},{id:"desc",label:"High → low"}];
 const COND_RANK = {bad:0,med:1,good:2};
 const COND = {good:"Good",med:"Fair",bad:"Poor"};
 
 const store = {get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
-const S = {origin:store.get("origin","pa"), when:store.get("when","sat"), owned:store.get("owned",["Ikon"]), sort:store.get("xsort","score"), dir:store.get("xdir","desc"), open:null};
+const S = {origin:store.get("origin","pa"), when:store.get("when","sat"), owned:store.get("owned",[]), sort:store.get("xsort","score"), dir:store.get("xdir","desc"), open:null};
 const LIVE = {snow:null, drive:{}, chains:null, feeds:{snow:"load",drive:"load",chains:"load",stations:"load"}, stations:null, at:{}, err:{}};
 const TTL = 30*60*1000;
 
@@ -407,6 +416,8 @@ function loadAll(force){
 }
 
 // ---------- Model ----------
+const camUrl = r => `https://opensnow.com/location/${r.cam}/cams`;
+const ticketUrl = r => `https://${r.ticket || SITES[r.id]}`;
 function confidence(sn, st){
   if(!sn) return null;
   if(!st || st.depth==null) return {lvl:"low", label:"Model only", short:"Model only", why:"No SNOTEL station within 30 km reports snow depth, so nothing measured backs up the model here. Check the resort's own report."};
@@ -507,13 +518,14 @@ function render(){
   const from = document.getElementById("origin").selectedOptions[0].text.split(" /")[0];
   document.getElementById("best").innerHTML = top.score ? `
     <span class="tag">Best bet</span>
-    <div class="name">${top.name} <span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf?`<span class="conf ${top.conf.lvl}">${top.conf.short}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
+    <div class="name">${top.name} <span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf&&top.conf.label==="Model only"?`<span class="conf low">Model only</span>`:""}${top.flag?`<span class="conf med">${top.flag}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
     <div class="stats">
       <div class="stat"><b class="fresh">${inch(top.h24)}</b><small>24h</small></div>
       <div class="stat"><b class="fresh">${inch(top.h72)}</b><small>72h</small></div>
       <div class="stat"><b>${fmt(top.drive)}</b><small>${top.chain?`Drive R${top.chain}`:"Drive"}</small></div>
       <div class="stat">${top.covered?`<b class="onpass">On pass</b><small>${top.passes.filter(p=>S.owned.includes(p))[0]}</small>`:`<b>$${top.price}</b><small>Ticket</small>`}</div>
-    </div>`
+    </div>
+    <div class="links" style="grid-column:1/-1;margin:0"><a href="${camUrl(top)}" target="_blank" rel="noopener">Webcams</a><a href="${ticketUrl(top)}" target="_blank" rel="noopener">${top.covered?"Resort site":"Buy tickets"}</a></div>`
     : `<span class="tag">Best bet</span><div class="why">Waiting for snow and route data…</div>`;
 
   const chainCell = r => r.chain ? `<span class="chain R${r.chain}">R${r.chain}</span>` : "";
@@ -524,14 +536,14 @@ function render(){
   document.getElementById("board").innerHTML = head + rows.map(r=>{
     const open = S.open===r.id;
     const condChip = r.cond ? `<span class="cond ${r.cond}">${COND[r.cond]}</span>` : `<span class="unk">${LIVE.feeds.snow==="err"?"no snow data":"loading"}</span>`;
-    const confChip = r.conf ? `<span class="conf ${r.conf.lvl}">${r.conf.short}</span>` : "";
+    const confChip = (r.conf&&r.conf.label==="Model only" ? `<span class="conf low">Model only</span>` : "") + (r.flag ? `<span class="conf med">${r.flag}</span>` : "");
     return `<button type="button" class="row ${S.owned.length && !r.covered?"dim":""}" data-id="${r.id}" aria-expanded="${open}">
       <div class="c-name"><div class="rname">${r.name}</div><div class="rmeta">${r.cond?`<span class="cond ${r.cond} m-only">${COND[r.cond]}</span>`:""}${r.rain?`<span class="rain m-only" style="margin:0">Rain</span>`:""}<span class="m-only">${confChip}</span>${r.score?`<span class="pass m-only">Worth ${r.score.toFixed(1)}</span>`:""}${r.passes.length?r.passes.map(p=>`<span class="pass ${S.owned.includes(p)?"own":""}">${p}</span>`).join(""):`<span class="pass">Independent</span>`}</div></div>
       <div class="c-cond">${condChip}${r.rain?`<br><span class="rain">Rain at base</span>`:""}<div style="margin-top:5px">${confChip}</div></div>
       <div class="num fresh cell c-24" data-l="24h">${inch(r.h24)}</div>
       <div class="num fresh cell c-72" data-l="72h">${inch(r.h72)}</div>
       <div class="num cell c-drive" data-l="Drive">${fmt(r.drive)}${chainCell(r)}<small>${CORRIDOR[r.corr].split(" ")[0]}${routesFailed?" · typical":""}</small></div>
-      <div class="num cell c-price" data-l="Ticket">${r.covered?`<span class="price onpass">Pass</span><small>($${r.price})</small>`:`$${r.price}<small>est.</small>`}</div>
+      <div class="num cell c-price" data-l="Ticket">${r.covered?`<span class="price onpass">Pass</span><small>($${r.price})</small>`:`$${r.price}<small>${r.ps==="listed"?"listed":"est."}</small>`}</div>
       <div class="c-score"><span class="num">${r.score?r.score.toFixed(1):"—"}</span><div class="meter"><i style="width:${(r.score/maxScore*100).toFixed(0)}%"></i></div></div>
       <span class="caret" aria-hidden="true">▸</span>
     </button>
@@ -541,11 +553,10 @@ function render(){
           <b>${r.st.depth}"</b> on the ground at <b>${r.st.name}</b>, ${Math.round(r.st.ft).toLocaleString()} ft, ${r.st.km} km away.<br>
           Depth change: <b>${r.st.d24==null?"—":(r.st.d24>0?"+":"")+r.st.d24+'"'}</b> 24h · <b>${r.st.d72==null?"—":(r.st.d72>0?"+":"")+r.st.d72+'"'}</b> 72h · reading ${r.st.date}</div>`
         : `<div class="obs">${LIVE.feeds.stations==="err"?"Station feed unavailable.":LIVE.stations?"No SNOTEL station within 30 km.":"Loading…"}</div>`}
-        ${r.conf?`<div style="margin-top:8px"><span class="conf ${r.conf.lvl}">${r.conf.label==="Model only"||r.conf.label==="Partial"?r.conf.short:r.conf.label+" confidence"}</span><div class="why">${r.conf.why}</div></div>`:""}
         <h3>Live from the mountain</h3><div class="links">
+          <a href="${camUrl(r)}" target="_blank" rel="noopener">Webcams</a>
+          <a href="${ticketUrl(r)}" target="_blank" rel="noopener">Buy tickets</a>
           <a href="https://${SITES[r.id]}" target="_blank" rel="noopener">Resort site</a>
-          <a href="https://www.google.com/search?q=${encodeURIComponent(r.name+" snow report")}" target="_blank" rel="noopener">Snow report</a>
-          <a href="https://www.google.com/search?q=${encodeURIComponent(r.name+" webcams")}" target="_blank" rel="noopener">Webcams</a>
           ${r.st?`<a href="https://wcc.sc.egov.usda.gov/nwcc/site?sitenum=${r.st.id}" target="_blank" rel="noopener">Station data</a>`:""}
         </div>
       </div>
@@ -557,7 +568,7 @@ function render(){
         <dt>Drive</dt><dd>${fmt(r.drive)} (${WHEN.find(w=>w.id===S.when).label})</dd>
         <dt>Base</dt><dd>${r.baseIn!=null?`${r.baseIn}" modeled`:"—"} · lodge ${Math.round(r.baseElev*3.281/100)*100} ft</dd>
         <dt>Snow level</dt><dd>${r.snowLvl?`${r.snowLvl[0].toLocaleString()}–${r.snowLvl[1].toLocaleString()} ft next 24h${r.rain?" · rain likely at base":""}`:"—"}</dd>
-        <dt>Ticket</dt><dd>${r.covered?`On your pass (walk-up ~$${r.price})`:`~$${r.price} walk-up; cheaper online ahead`}</dd>
+        <dt>Ticket</dt><dd>${r.covered?`On your pass ($${r.price} without it)`:`$${r.price} ${r.ps==="listed"?"listed adult weekday price":"estimate"}; often cheaper bought online ahead`}</dd>
         <dt>Pass</dt><dd>${r.covered?`Covered by ${r.passes.filter(p=>S.owned.includes(p)).join(", ")}`:r.passes.length?`On ${r.passes.join(", ")}, not one you hold`:"Independent"}</dd>
       </dl></div>
     </div>`:""}`;
