@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Snowline">
+<meta name="theme-color" content="#eef3f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d151d" media="(prefers-color-scheme: dark)">
+<title>Snowline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: control rail on top, "best bet" ticket, then a resort board of expandable rows (snow report vernacular) */
+:root{
+  --bg:#eef3f7; --surface:#ffffff; --ink:#14212d; --muted:#5d6f80; --line:#d3dee8;
+  --accent:#e2571c; --snow:#2f6fb3; --snow-soft:#dbe8f6;
+  --good:#1f8a4c; --warn:#b7791f; --bad:#c0392b; --hover:#e5f3ff; --sorted:#cce8ff; --hover-line:#99d1ff;
+  --display:"Saira Condensed","Arial Narrow",sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d151d; --surface:#15212c; --ink:#e6eef5; --muted:#8fa3b5; --line:#263646;
+  --accent:#ff7a3d; --snow:#7fb2ea; --snow-soft:#1c3048;
+  --good:#4cc27e; --warn:#e3a94a; --bad:#ef6b5c; --hover:#1d2f40; --sorted:#25405a; --hover-line:#3d6a92; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d151d; --surface:#15212c; --ink:#e6eef5; --muted:#8fa3b5; --line:#263646;
+  --accent:#ff7a3d; --snow:#7fb2ea; --snow-soft:#1c3048;
+  --good:#4cc27e; --warn:#e3a94a; --bad:#ef6b5c; --hover:#1d2f40; --sorted:#25405a; --hover-line:#3d6a92; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+img{max-width:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:max(20px,env(safe-area-inset-top,0px));padding-bottom:max(48px,env(safe-area-inset-bottom,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 20px}
+h1{font:800 clamp(2rem,6vw,2.9rem)/1 var(--display);letter-spacing:.01em;margin:0;text-transform:uppercase;text-wrap:balance}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:4px 0 0;max-width:60ch}
+.flag{font:600 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--warn);border:1px solid currentColor;border-radius:3px;padding:5px 7px;white-space:nowrap}
+.label{font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 20px;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.ctl{display:flex;flex-direction:column;gap:8px;min-width:0}
+.seg,.chips{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;color:inherit;cursor:pointer}
+.seg button,.chips button,select{font:500 13px/1 var(--body);padding:8px 10px;border-radius:5px;border:1px solid var(--line);background:transparent}
+select{background:var(--surface);width:100%}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chips button[aria-pressed="true"]{background:var(--snow-soft);border-color:var(--snow);color:var(--ink)}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.best{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px 14px;align-items:center;padding:16px;border-radius:8px;border:2px dashed var(--accent);background:var(--surface)}
+.best .tag{font:800 13px/1 var(--display);letter-spacing:.1em;text-transform:uppercase;background:var(--accent);color:#fff;padding:7px 9px;border-radius:3px}
+.best .name{font:700 1.7rem/1.05 var(--display);text-transform:uppercase;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
+.best .why{color:var(--muted);font-size:14px}
+.stats{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:6px;background:var(--bg);min-width:0}
+.stat b{font:600 clamp(1.15rem,5vw,1.6rem)/1 var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat b.fresh{color:var(--snow)} .stat b.onpass{color:var(--good);font-size:clamp(1rem,4.2vw,1.35rem)}
+.stat small{font:500 10px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msort{display:none;align-items:center;gap:8px}
+.msort select{flex:1}
+.msort button{font:500 13px/1 var(--body);padding:8px 10px;border-radius:5px;border:1px solid var(--line);background:transparent;white-space:nowrap}
+@media (max-width:760px){.msort{display:flex}}
+.board{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.key{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.key .k{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0}
+.key .k span{color:var(--muted)}
+.cond{display:inline-flex;align-items:center;gap:6px;font:600 11px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:5px 7px;border-radius:3px;white-space:nowrap}
+.cond::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.cond.good{color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)}
+.cond.med{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.cond.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
+.price.onpass{color:var(--good)}
+.rain{display:inline-block;margin-top:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 5px;border-radius:3px;color:var(--snow);border:1px dashed var(--snow)}
+.m-only{display:none}
+.row{display:grid;grid-template-columns:minmax(0,2fr) 1.1fr .7fr .7fr 1fr .8fr 1fr 22px;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);width:100%;text-align:left;background:none;border-left:0;border-right:0;border-bottom:0}
+.row.head{border-top:0;cursor:default;padding-block:0;align-items:stretch;border-bottom:1px solid var(--line)}
+.th{position:relative;display:flex;align-items:center;gap:4px;margin:0 -6px;padding:15px 6px 7px;border:0;background:transparent;font:400 13px/1.2 var(--body);color:var(--muted);text-align:left;cursor:default;min-width:0;white-space:nowrap}
+.th span{overflow:hidden;text-overflow:ellipsis}
+.th::after{content:"";position:absolute;right:-6px;top:7px;bottom:7px;width:1px;background:var(--line)}
+.th:last-of-type::after{display:none}
+.th:hover{background:var(--hover)}
+.th[aria-sort="ascending"],.th[aria-sort="descending"]{background:var(--sorted);color:var(--ink)}
+.th .chev{position:absolute;top:2px;left:50%;transform:translateX(-50%);width:9px;height:6px;color:var(--muted)}
+.th .dd{margin-left:auto;padding-left:5px;border-left:1px solid transparent;color:var(--muted);visibility:hidden;font-size:10px;align-self:stretch;display:flex;align-items:center}
+.th:hover .dd{visibility:visible;border-left-color:var(--hover-line)}
+.th:focus-visible{outline:1px dotted var(--ink);outline-offset:-2px}
+.row:not(.head):hover{background:var(--hover)}
+.row[aria-expanded="true"]{background:var(--sorted)}
+.row.dim{opacity:.72}
+.rname{font:700 1.15rem/1.1 var(--display);text-transform:uppercase;letter-spacing:.02em}
+.rmeta{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.pass{font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 5px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+.pass.own{border-color:var(--good);color:var(--good)}
+.num{font:600 15px/1.2 var(--mono);font-variant-numeric:tabular-nums}
+.num small{display:block;font:400 11px/1.3 var(--mono);color:var(--muted)}
+.fresh{color:var(--snow)}
+.chain{font:600 11px/1 var(--mono);padding:3px 5px;border-radius:3px;margin-left:4px;vertical-align:1px}
+.chain.R1{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.chain.R2,.chain.R3{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:6px}
+.meter i{display:block;height:100%;background:var(--accent)}
+.caret{color:var(--muted);transition:transform .2s}
+.row[aria-expanded="true"] .caret{transform:rotate(90deg)}
+.detail{padding:4px 16px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;border-top:1px dashed var(--line)}
+.detail h3{font:700 1rem/1 var(--display);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px}
+.detail dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:14px}
+.detail dt{color:var(--muted)}
+.detail dd{margin:0}
+svg text{fill:var(--muted);font:500 10px var(--mono)}
+.conf{display:inline-flex;align-items:center;gap:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 5px;border-radius:3px;border:1px solid currentColor;white-space:nowrap}
+.conf.high{color:var(--good)} .conf.med{color:var(--warn)} .conf.low{color:var(--bad)}
+.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.links a{font:500 13px/1 var(--body);color:var(--ink);text-decoration:none;padding:9px 11px;border:1px solid var(--line);border-radius:5px;background:var(--bg)}
+.links a:hover{border-color:var(--snow)}
+.obs{font-size:14px;line-height:1.5}
+.obs b{font-family:var(--mono);font-weight:600}
+.why{color:var(--muted);font-size:13px;margin-top:4px}
+@media (max-width:760px){
+  .row.head{display:none}
+  .row{grid-template-columns:repeat(4,minmax(0,1fr)) 14px;grid-template-areas:"name name name name caret" "s24 s72 drive price caret";gap:10px 8px;padding:14px 16px}
+  .row .c-name{grid-area:name} .row .c-24{grid-area:s24} .row .c-72{grid-area:s72} .row .c-drive{grid-area:drive} .row .c-price{grid-area:price} .row .caret{grid-area:caret;align-self:center}
+  .row .c-cond,.row .c-score{display:none}
+  .row .cell::before{content:attr(data-l);display:block;font:500 10px/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+  .row .num{font-size:16px}
+  .row .cell{align-self:start}
+  .rname{font-size:1.3rem}
+  .m-only{display:inline-flex}
+  .detail{grid-template-columns:1fr}
+}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.notes section{min-width:0}
+.notes h2{font:700 1.3rem/1 var(--display);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px}
+.notes ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--ink)}
+.notes li span{color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head><body>
+<style>
+.feeds{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px;background:var(--surface);border:1px solid var(--line);border-radius:8px;font-size:13px}
+.feed{display:inline-flex;align-items:center;gap:6px}
+.feed i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.feed.ok i{background:var(--good)} .feed.err i{background:var(--bad)} .feed.est i{background:var(--warn)} .feed.load i{background:var(--snow);animation:pulse 1s infinite}
+.feed small{color:var(--muted)}
+.feed a{color:var(--snow)}
+@keyframes pulse{50%{opacity:.3}}
+#refresh{margin-left:auto;font:600 12px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;border-radius:5px;border:1px solid var(--accent);color:var(--accent);background:transparent}
+.unk{color:var(--muted);font-size:11px}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Snow<span>line</span></h1>
+      <p class="sub">Live modeled snowfall, real route times from your origin, Caltrans chain controls and pass coverage for resorts within a day's drive of the Bay.</p>
+    </div>
+  </header>
+
+  <div class="feeds" id="feeds"></div>
+  <div class="key" id="blocked" hidden><span class="cond bad">No live data</span><span id="blockedMsg"></span></div>
+
+  <div class="controls">
+    <div class="ctl"><label class="label" for="origin">Leaving from</label>
+      <select id="origin">
+        <option value="pa">Palo Alto / Peninsula</option>
+        <option value="sf">San Francisco</option>
+        <option value="oak">Oakland / East Bay</option>
+        <option value="sj">San Jose</option>
+      </select></div>
+    <div class="ctl"><span class="label">Departure</span><div class="seg" id="when"></div></div>
+    <div class="ctl"><span class="label">Passes I hold</span><div class="chips" id="passes"></div></div>
+    
+  </div>
+
+  <div class="best" id="best"></div>
+  <div class="msort"><label class="label" for="msort">Sort</label>
+    <select id="msort"><option value="score">Worth it</option><option value="cond">Conditions</option><option value="h24">24h snow</option><option value="fresh">72h snow</option><option value="drive">Drive</option><option value="price">Price</option><option value="name">Name</option></select>
+    <button type="button" id="mdir"></button></div>
+  <div class="board" id="board"></div>
+
+  <div class="key" aria-label="Snow condition key">
+    <span class="label">Conditions</span>
+    <div class="k"><span class="cond good">Good</span><span>6"+ in 24h or 12"+ in 72h, base 24"+</span></div>
+    <div class="k"><span class="cond med">Fair</span><span>3–11" in 72h, or base 30"+</span></div>
+    <div class="k"><span class="cond bad">Poor</span><span>under 3" in 72h and thin base</span></div>
+    <div class="k"><span class="rain" style="margin:0">Rain at base</span><span>snow level above the base lodge while precip falls, next 24h</span></div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>Where the numbers come from</h2>
+      <ol>
+        <li><b>Snow</b>: Open-Meteo weather model at each resort's mid-mountain elevation. 24h and 72h are rolling hourly sums; base is modeled snow depth. Snow level is the forecast freezing level minus ~1,000 ft. <span>It's a model, not the resort's stake, so expect it to differ from the resort report.</span></li>
+        <li><b>Drive</b>: OSRM road routing from your origin (free-flow time) × your departure traffic factor + chain delay. Mammoth is routed via Minden, since Tioga closes in winter. <span>The traffic factor is an estimate; no free live-traffic API exists.</span></li>
+        <li><b>Chains</b>: Caltrans CWWP2 chain-control feed for I-80, US-50, CA-88, CA-4 and CA-108. R1 adds ~15 min, R2 ~35, R3 ~60.</li>
+        <li><b>Price</b>: estimated peak-weekend walk-up adult ticket. No resort publishes a price API.</li>
+        <li><b>Confidence</b>: compares the model's 72h snowfall with the measured snow-depth rise at the nearest NRCS SNOTEL station within 30 km. Agreement = High, same direction = Medium, disagreement or no station = Low. Fresh snow settles, so depth usually rises 60–90% of what fell.</li>
+        <li><b>Passes</b>: 2025-26 lineups. Confirm 2026-27 before relying on them.</li>
+      </ol>
+    </section>
+    <section>
+      <h2>Worth-it score</h2>
+      <ol>
+        <li>(24h × 2 + 72h × 2 + base ÷ 10) ÷ drive hours.</li>
+        <li>× 1.25 when a pass you hold covers the resort.</li>
+        <li>Data caches for 30 minutes. Hit Refresh to pull new numbers.</li>
+      </ol>
+    </section>
+  </div>
+</div>
+
+<script>
+const PASSES = ["Ikon","Epic","Mountain Collective","Indy"];
+// lat/lon near mid-mountain; elev in meters for the snow model; road = parking-lot point for routing
+const RESORTS = [
+  {id:"pal",baseElev:1890,name:"Palisades Tahoe",area:"North Lake · Olympic Valley",corr:"I80",passes:["Ikon","Mountain Collective"],lat:39.192,lon:-120.258,elev:2300,road:[39.1968,-120.2354],price:259,fb:225},
+  {id:"nst",baseElev:1930,name:"Northstar",area:"North Lake · Truckee",corr:"I80",passes:["Epic"],lat:39.262,lon:-120.130,elev:2400,road:[39.2746,-120.1210],price:279,fb:230},
+  {id:"sug",baseElev:2100,name:"Sugar Bowl",area:"Donner Summit",corr:"I80",passes:["Mountain Collective"],lat:39.292,lon:-120.348,elev:2300,road:[39.3039,-120.3355],price:209,fb:200},
+  {id:"bor",baseElev:2200,name:"Boreal",area:"Donner Summit",corr:"I80",passes:[],lat:39.331,lon:-120.352,elev:2200,road:[39.3364,-120.3497],price:119,fb:195},
+  {id:"kir",baseElev:2380,name:"Kirkwood",area:"Carson Pass",corr:"SR88",passes:["Epic"],lat:38.672,lon:-120.070,elev:2500,road:[38.6847,-120.0652],price:199,fb:220},
+  {id:"sat",baseElev:2025,name:"Sierra-at-Tahoe",area:"Echo Summit",corr:"US50",passes:["Ikon"],lat:38.794,lon:-120.082,elev:2300,road:[38.7990,-120.0809],price:179,fb:220},
+  {id:"hev",baseElev:1990,name:"Heavenly",area:"South Lake Tahoe",corr:"US50",passes:["Epic"],lat:38.926,lon:-119.906,elev:2700,road:[38.9353,-119.9400],price:289,fb:250},
+  {id:"ros",baseElev:2520,name:"Mt. Rose",area:"Reno side · via I-80",corr:"I80",passes:[],lat:39.318,lon:-119.880,elev:2600,road:[39.3150,-119.8850],price:189,fb:260},
+  {id:"bvl",baseElev:2010,name:"Bear Valley",area:"Ebbetts Pass · Hwy 4",corr:"SR4",passes:[],lat:38.475,lon:-120.033,elev:2300,road:[38.4680,-120.0400],price:139,fb:210},
+  {id:"dod",baseElev:2010,name:"Dodge Ridge",area:"Sonora Pass · Hwy 108",corr:"SR108",passes:[],lat:38.182,lon:-119.953,elev:2300,road:[38.1880,-119.9570],price:129,fb:200},
+  {id:"mam",baseElev:2424,name:"Mammoth",area:"Eastern Sierra · via US-50 & 395",corr:"US50",passes:["Ikon"],lat:37.635,lon:-119.030,elev:2900,road:[37.6510,-119.0270],price:239,fb:410,via:[38.9541,-119.7660]},
+];
+const SITES = {pal:"palisadestahoe.com",nst:"northstarcalifornia.com",sug:"sugarbowl.com",bor:"rideboreal.com",kir:"kirkwood.com",sat:"sierraattahoe.com",hev:"skiheavenly.com",ros:"skirose.com",bvl:"bearvalley.com",dod:"dodgeridge.com",mam:"mammothmountain.com"};
+const ORIGINS = {pa:[37.4419,-122.1430],sf:[37.7749,-122.4194],oak:[37.8044,-122.2712],sj:[37.3382,-121.8863]};
+const CORRIDOR = {I80:"I-80 over Donner",US50:"US-50 over Echo",SR88:"CA-88 over Carson",SR4:"CA-4 to Arnold",SR108:"CA-108 to Pinecrest"};
+const CHAIN_MIN = {1:15,2:35,3:60};
+const WHEN = [{id:"mid",label:"Weekday AM",f:1.0},{id:"fri",label:"Fri 3 pm",f:1.45},{id:"sat",baseElev:2025,label:"Sat 5 am",f:1.05}];
+const SORTS = [{id:"score",label:"Worth it"},{id:"cond",label:"Conditions"},{id:"fresh",label:"Fresh 72h"},{id:"drive",label:"Drive"},{id:"price",label:"Price"}];
+const DIRS = [{id:"asc",label:"Low → high"},{id:"desc",label:"High → low"}];
+const COND_RANK = {bad:0,med:1,good:2};
+const COND = {good:"Good",med:"Fair",bad:"Poor"};
+
+const store = {get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const S = {origin:store.get("origin","pa"), when:store.get("when","sat"), owned:store.get("owned",["Ikon"]), sort:store.get("xsort","score"), dir:store.get("xdir","desc"), open:null};
+const LIVE = {snow:null, drive:{}, chains:null, feeds:{snow:"load",drive:"load",chains:"load",stations:"load"}, stations:null, at:{}, err:{}};
+const TTL = 30*60*1000;
+
+// ---------- Feeds ----------
+const toIn = (v,u) => v==null ? 0 : u==="cm" ? v/2.54 : u==="m" ? v*39.37 : u==="mm" ? v/25.4 : u==="ft" ? v*12 : v;
+
+async function getJSON(url, ms=15000){
+  const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), ms);
+  let res;
+  try{ res = await fetch(url,{signal:ctl.signal}); }
+  catch(e){ throw new Error(e.name==="AbortError" ? "timed out" : `blocked (${e.message||e.name})`); }
+  finally{ clearTimeout(t); }
+  const j = await res.json().catch(()=>null);
+  if(!res.ok) throw new Error((j&&j.reason) || ("HTTP "+res.status));
+  return j;
+}
+async function loadSnow(){
+  const q = new URLSearchParams({
+    latitude:RESORTS.map(r=>r.lat).join(","), longitude:RESORTS.map(r=>r.lon).join(","),
+    elevation:RESORTS.map(r=>r.elev).join(","),
+    hourly:"snowfall,snow_depth,precipitation,freezing_level_height", daily:"snowfall_sum",
+    past_days:"6", forecast_days:"2", precipitation_unit:"inch", timezone:"America/Los_Angeles"});
+  let data;
+  try{ data = await getJSON("https://api.open-meteo.com/v1/forecast?"+q); }
+  catch(e){
+    if(/^blocked|timed out/.test(e.message)) throw e;      // network problem: retrying won't help
+    q.set("hourly","snowfall,snow_depth");                  // API rejected a variable: drop the rain-risk ones
+    data = await getJSON("https://api.open-meteo.com/v1/forecast?"+q);
+  }
+  if(!Array.isArray(data)) data=[data];
+  const out = {};
+  data.forEach((d,i)=>{
+    const r = RESORTS[i];
+    const hu = d.hourly_units?.snowfall, du = d.daily_units?.snowfall_sum, su = d.hourly_units?.snow_depth;
+    // current local hour at the resort, as "YYYY-MM-DDTHH"
+    const nowHour = new Date(Date.now() + (d.utc_offset_seconds||0)*1000).toISOString().slice(0,13);
+    let idx = d.hourly.time.findIndex(t=>t.slice(0,13)===nowHour);
+    if(idx<0) idx = d.hourly.time.length-1;
+    const sum = n => d.hourly.snowfall.slice(Math.max(0,idx-n+1), idx+1).reduce((a,b)=>a+toIn(b,hu),0);
+    let depth = null; for(let k=idx;k>=0 && depth==null;k--) depth = d.hourly.snow_depth[k];
+    let di = d.daily.time.indexOf(nowHour.slice(0,10)); if(di<0) di = d.daily.time.length-1;
+    const days = d.daily.time.slice(Math.max(0,di-6), di+1), snow7 = d.daily.snowfall_sum.slice(Math.max(0,di-6), di+1).map(v=>+toIn(v,du).toFixed(1));
+    // Snow level ≈ freezing level − 300 m. Rain risk = precip in the next 24h while snow level sits above the base lodge.
+    const fu = d.hourly_units?.freezing_level_height, pu = d.hourly_units?.precipitation;
+    const lvls = [], rainHrs = [];
+    for(let k=idx+1;k<=idx+24 && k<d.hourly.time.length;k++){
+      let fz = d.hourly.freezing_level_height?.[k]; if(fz==null) continue;
+      if(fu==="ft") fz = fz*0.3048;
+      const sl = fz - 300; lvls.push(sl);
+      if(toIn(d.hourly.precipitation?.[k],pu) >= 0.02 && sl > r.baseElev) rainHrs.push(k);
+    }
+    const ft = m => Math.max(0, Math.round(m*3.281/100)*100);
+    out[r.id] = {h24:+sum(24).toFixed(1), h72:+sum(72).toFixed(1), snow7, days, baseIn:Math.round(toIn(depth,su)),
+      snowLvl: lvls.length ? [ft(Math.min(...lvls)), ft(Math.max(...lvls))] : null, rainRisk: rainHrs.length>0};
+  });
+  return out;
+}
+
+async function osrm(path){
+  const j = await getJSON("https://router.project-osrm.org/"+path); if(j.code!=="Ok") throw new Error("OSRM "+j.code);
+  return j;
+}
+async function loadDrive(origin){
+  const o = ORIGINS[origin], ll = p => `${p[1]},${p[0]}`;
+  const direct = RESORTS.filter(r=>!r.via);
+  const t = await osrm(`table/v1/driving/${[o,...direct.map(r=>r.road)].map(ll).join(";")}?sources=0&annotations=duration`);
+  const out = {};
+  direct.forEach((r,i)=>{ const s=t.durations[0][i+1]; if(s!=null) out[r.id]=Math.round(s/60); });
+  for(const r of RESORTS.filter(r=>r.via)){
+    const j = await osrm(`route/v1/driving/${[o,r.via,r.road].map(ll).join(";")}?overview=false`);
+    out[r.id] = Math.round(j.routes[0].duration/60);
+  }
+  return out;
+}
+
+// Caltrans CWWP2 chain controls. Parsed defensively: find any record naming one of our routes and read the R-level.
+const ROUTE_RX = {I80:/\b(I-?80|Interstate 80)\b/i, US50:/\b(US-?50|US 50|Highway 50)\b/i, SR88:/\b(SR-?88|SR 88|Highway 88)\b/i, SR4:/\b(SR-?4|SR 4|Highway 4)\b/i, SR108:/\b(SR-?108|SR 108|Highway 108)\b/i};
+async function loadChains(){
+  const urls = ["https://cwwp2.dot.ca.gov/data/d3/cc/ccStatusD03.json","https://cwwp2.dot.ca.gov/data/d10/cc/ccStatusD10.json"];
+  const got = await Promise.allSettled(urls.map(u=>getJSON(u)));
+  const ok = got.filter(g=>g.status==="fulfilled").map(g=>g.value);
+  if(!ok.length) throw new Error(got[0].reason?.message||"blocked");
+  const lvl = {}; // corridor -> max level (0 = none) ; undefined = no record
+  const visit = o => {
+    if(!o || typeof o!=="object") return;
+    if(Array.isArray(o)){o.forEach(visit);return;}
+    const vals = []; (function flat(x){ if(x&&typeof x==="object") Object.values(x).forEach(flat); else if(typeof x==="string") vals.push(x); })(o);
+    const txt = vals.join(" | ");
+    const isRecord = Object.keys(o).some(k=>/^(cc|chainControl)$/i.test(k)) || ("location" in o && ("statusData" in o || "status" in o));
+    if(isRecord){
+      for(const [c,rx] of Object.entries(ROUTE_RX)) if(rx.test(txt)){
+        const m = txt.match(/\bR-?\s?([123])\b/i);
+        lvl[c] = Math.max(lvl[c] ?? 0, m ? +m[1] : 0);
+      }
+      return;
+    }
+    Object.values(o).forEach(visit);
+  };
+  ok.forEach(visit);
+  return lvl;
+}
+
+// NRCS SNOTEL (measured snow depth). Goes through this site's /proxy/awdb/ rewrite first (no CORS issue), then direct.
+const AWDB = "https://wcc.sc.egov.usda.gov/awdbRestApi/services/v1/";
+async function awdb(path, params){
+  const qs = new URLSearchParams(params).toString();
+  try{ return await getJSON(`proxy/awdb/${path}?${qs}`, 20000); }
+  catch(e){ return await getJSON(`${AWDB}${path}?${qs}`, 20000); }
+}
+const km = (a,b,c,d) => { const R=6371, t=x=>x*Math.PI/180, dl=t(c-a), dn=t(d-b);
+  const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.sqrt(h)); };
+const ymd = d => d.toISOString().slice(0,10);
+async function loadStations(){
+  let list = store.get("snotel_list", null);
+  if(!list || Date.now()-list.t > 7*864e5){
+    const raw = await awdb("stations", {stationTriplets:"*:CA:SNTL,*:NV:SNTL", returnStationElements:"false"});
+    const arr = (Array.isArray(raw)?raw:[]).filter(x=>x && x.latitude && x.longitude && (!x.endDate || x.endDate >= "2026"))
+      .map(x=>({t:x.stationTriplet, name:x.name, lat:+x.latitude, lon:+x.longitude, ft:+x.elevation}));
+    if(!arr.length) throw new Error("no stations returned");
+    list = {t:Date.now(), v:arr}; store.set("snotel_list", list);
+  }
+  // nearest station within 30 km of each resort
+  const pick = {};
+  for(const r of RESORTS){
+    let best=null;
+    for(const st of list.v){ const d=km(r.lat,r.lon,st.lat,st.lon); if(d<=30 && (!best || d<best.km)) best={...st, km:+d.toFixed(1)}; }
+    if(best) pick[r.id]=best;
+  }
+  const trips = [...new Set(Object.values(pick).map(p=>p.t))];
+  if(!trips.length) return {};
+  const end = new Date(), begin = new Date(Date.now()-7*864e5);
+  const raw = await awdb("data", {stationTriplets:trips.join(","), elements:"SNWD", duration:"DAILY", beginDate:ymd(begin), endDate:ymd(end)});
+  const series = {};
+  for(const st of (Array.isArray(raw)?raw:[])){
+    const el = (st.data||[]).find(d=>d.stationElement?.elementCode==="SNWD") || (st.data||[])[0];
+    const vals = (el?.values||[]).filter(v=>v && v.value!=null);
+    if(vals.length) series[st.stationTriplet] = vals;
+  }
+  const out = {};
+  for(const [rid,p] of Object.entries(pick)){
+    const v = series[p.t]; const last = v?.[v.length-1];
+    const back = n => { if(!v) return null; const target = ymd(new Date(new Date(last.date.slice(0,10)+"T12:00Z").getTime()-n*864e5)); const x=v.find(o=>o.date.slice(0,10)===target); return x?x.value:null; };
+    out[rid] = {...p, id:p.t.split(":")[0], depth:last?last.value:null, date:last?last.date.slice(0,10):null,
+      d24: last&&back(1)!=null ? +(last.value-back(1)).toFixed(1) : null,
+      d72: last&&back(3)!=null ? +(last.value-back(3)).toFixed(1) : null};
+  }
+  return out;
+}
+
+function cached(key){ const c=store.get(key,null); return c && Date.now()-c.t<TTL ? c : null; }
+async function run(name, key, fn, apply, force){
+  const c = !force && cached(key);
+  if(c){ apply(c.v); LIVE.feeds[name]="ok"; LIVE.at[name]=c.t; render(); return; }
+  LIVE.feeds[name]="load"; render();
+  try{ const v=await fn(); store.set(key,{t:Date.now(),v}); apply(v); LIVE.feeds[name]="ok"; LIVE.at[name]=Date.now(); }
+  catch(e){ LIVE.feeds[name]="err"; LIVE.err[name]=e.message||String(e); }
+  render();
+}
+function loadAll(force){
+  run("snow","snow",loadSnow,v=>LIVE.snow=v,force);
+  run("drive","drive_"+S.origin,()=>loadDrive(S.origin),v=>LIVE.drive[S.origin]=v,force);
+  run("chains","chains",loadChains,v=>LIVE.chains=v,force);
+  run("stations","stations_obs",loadStations,v=>LIVE.stations=v,force);
+}
+
+// ---------- Model ----------
+function confidence(sn, st){
+  if(!sn) return null;
+  if(!st || st.depth==null) return {lvl:"low", label:"Model only", short:"Model only", why:"No SNOTEL station within 30 km reports snow depth, so nothing measured backs up the model here. Check the resort's own report."};
+  const m = sn.h72, o = Math.max(0, st.d72 ?? 0);
+  const where = `${st.name} (${st.km} km away, ${Math.round(st.ft).toLocaleString()} ft)`;
+  if(st.d72==null) return {lvl:"med", label:"Partial", short:"Partial data", why:`${where} is reporting, but has gaps in the last 3 days.`};
+  if(m<2 && o<2) return {lvl:"high", label:"High", short:"High conf.", why:`Model and ${where} both show little or no new snow.`};
+  // Depth gain normally runs 60–90% of new snowfall because fresh snow settles.
+  const ratio = o / Math.max(m, 0.5);
+  if(ratio>=0.4 && ratio<=1.8) return {lvl:"high", label:"High", short:"High conf.", why:`${where} depth rose ${o.toFixed(1)}" in 72h vs ${m.toFixed(1)}" modeled snowfall. They agree.`};
+  if(ratio>=0.2 && ratio<=3) return {lvl:"med", label:"Medium", short:"Med conf.", why:`${where} rose ${o.toFixed(1)}" vs ${m.toFixed(1)}" modeled. Same direction, different amounts.`};
+  return {lvl:"low", label:"Low", short:"Low conf.", why:`${where} rose ${o.toFixed(1)}" vs ${m.toFixed(1)}" modeled. They disagree, so trust the station.`};
+}
+function calc(r){
+  const w = WHEN.find(x=>x.id===S.when);
+  const sn = LIVE.snow?.[r.id];
+  const baseMin = LIVE.drive[S.origin]?.[r.id];
+  const chain = LIVE.chains ? LIVE.chains[r.corr] : undefined;
+  const drive = baseMin!=null ? Math.round(baseMin*w.f + (chain?CHAIN_MIN[chain]:0)) : null;
+  const h24 = sn?.h24 ?? null, h72 = sn?.h72 ?? null, baseIn = sn?.baseIn ?? null;
+  const covered = r.passes.some(p=>S.owned.includes(p));
+  const cond = sn==null ? null : ((h24>=6 || h72>=12) && baseIn>=24) ? "good" : (h72>=3 || baseIn>=30) ? "med" : "bad";
+  const score = (sn && drive) ? ((h24*2 + h72*2 + baseIn/10) / (drive/60)) * (covered?1.25:1) : 0;
+  const st = LIVE.stations?.[r.id] || null;
+  return {...r, st, conf: confidence(sn, LIVE.stations ? st : undefined), rain: sn?.rainRisk||false, snowLvl: sn?.snowLvl||null, sn, drive, chain, h24, h72, baseIn, covered, cond, cost:covered?0:r.price, score};
+}
+const fmt = m => m==null ? "—" : `${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}`;
+const inch = v => v==null ? "—" : `${v<10&&v%1? v.toFixed(1): Math.round(v)}"`;
+const ago = t => { const m=Math.round((Date.now()-t)/60000); return m<1?"just now":`${m} min ago`; };
+
+// ---------- Render ----------
+function segs(el, items, key, onSet){
+  el.innerHTML = items.map(i=>`<button type="button" data-v="${i.id}" aria-pressed="${S[key]===i.id}">${i.label}</button>`).join("");
+  el.onclick = e=>{const b=e.target.closest("button"); if(!b) return; S[key]=b.dataset.v; onSet&&onSet(); render();};
+}
+function renderFeeds(){
+  const f = (name,label,okNote,errNote) => {
+    const st = LIVE.feeds[name];
+    const note = st==="ok" ? `<small>${okNote} · ${ago(LIVE.at[name])}</small>` : st==="err" ? `<small>${errNote}</small>` : `<small>loading…</small>`;
+    return `<span class="feed ${st}"><i></i>${label} ${note}</span>`;
+  };
+  document.getElementById("feeds").innerHTML =
+    f("snow","Snow","Open-Meteo","unavailable ("+(LIVE.err.snow||"")+")") +
+    f("drive","Routes","OSRM","unavailable, showing typical times") +
+    f("stations","Stations","NRCS SNOTEL","unavailable ("+(LIVE.err.stations||"")+")") +
+    f("chains","Chains","Caltrans",`blocked by browser · <a href="https://quickmap.dot.ca.gov/" target="_blank" rel="noopener">check QuickMap</a>`) +
+    `<span class="feed est"><i></i>Prices <small>estimates</small></span>` +
+    `<button type="button" id="refresh">Refresh</button>`;
+  document.getElementById("refresh").onclick = ()=>loadAll(true);
+}
+function bars(sn){
+  const snow=sn.snow7, W=300,H=110,pad=22,max=Math.max(6,...snow), bw=(W-pad)/snow.length;
+  const ticks=[0,Math.round(max/2),Math.round(max)];
+  const lbl = sn.days.map(d=>new Date(d+"T12:00").toLocaleDateString("en-US",{weekday:"short"}));
+  return `<svg viewBox="0 0 ${W} ${H+16}" width="100%" role="img" aria-label="Daily snowfall, last 7 days">
+    ${ticks.map(t=>{const y=H-(t/max)*(H-12);return `<line x1="${pad}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="0" y="${y+3}">${t}"</text>`}).join("")}
+    ${snow.map((s,i)=>{const h=(s/max)*(H-12),x=pad+i*bw+4;return `<rect x="${x}" y="${H-h}" width="${bw-8}" height="${h}" rx="2" fill="${i>=4?"var(--snow)":"var(--snow-soft)"}"/>${s>=0.5?`<text x="${x+(bw-8)/2}" y="${H-h-3}" text-anchor="middle">${Math.round(s)}</text>`:""}<text x="${x+(bw-8)/2}" y="${H+13}" text-anchor="middle">${lbl[i]}</text>`}).join("")}
+  </svg>`;
+}
+function render(){
+  document.getElementById("origin").value = S.origin;
+  segs(document.getElementById("when"), WHEN, "when", ()=>store.set("when",S.when));
+  const p = document.getElementById("passes");
+  p.innerHTML = PASSES.map(x=>`<button type="button" data-v="${x}" aria-pressed="${S.owned.includes(x)}">${x}</button>`).join("");
+  p.onclick = e=>{const b=e.target.closest("button"); if(!b) return; const v=b.dataset.v;
+    S.owned = S.owned.includes(v)? S.owned.filter(x=>x!==v) : [...S.owned,v]; store.set("owned",S.owned); render();};
+  renderFeeds();
+  document.getElementById("msort").value = S.sort;
+  document.getElementById("mdir").textContent = S.dir==="asc" ? "↑ Low → high" : "↓ High → low";
+  const allDown = LIVE.feeds.snow==="err" && LIVE.feeds.drive==="err";
+  document.getElementById("blocked").hidden = !allDown;
+  if(allDown && !LIVE.probe){
+    LIVE.probe = "running";
+    Promise.all([
+      getJSON("https://api.open-meteo.com/v1/forecast?latitude=39.2&longitude=-120.2&current=temperature_2m").then(()=>"ok",e=>e.message),
+      fetch("manifest.json",{cache:"no-store"}).then(r=>r.ok?"ok":"HTTP "+r.status,e=>e.message),
+    ]).then(([ext,own])=>{ LIVE.probe = `Tiny weather test: ${ext}. Own site: ${own}.`; render(); });
+  }
+  if(allDown){
+    const where = location.protocol==="https:" ? location.host : location.protocol==="file:" ? "a local file" : (location.host||"an embedded preview");
+    const hosted = location.protocol==="https:" && !/claude|anthropic|usercontent/i.test(location.host);
+    document.getElementById("blockedMsg").innerHTML =
+      `Running on <b>${where}</b>. Snow: ${LIVE.err.snow||"?"}. Routes: ${LIVE.err.drive||"?"}. ${LIVE.probe&&LIVE.probe!=="running"?LIVE.probe+" ":""}` +
+      (hosted ? `This is a real site, so the requests should work. Check your connection, then tap Refresh. If it keeps failing, screenshot this.`
+              : `Previews block outside requests. Open your Netlify link in Safari, or the home-screen app.`);
+  }
+
+  // fall back to typical drive times if routing failed
+  const routesFailed = LIVE.feeds.drive==="err";
+  let rows = RESORTS.map(r=>{ if(routesFailed && !LIVE.drive[S.origin]) LIVE.drive[S.origin]=Object.fromEntries(RESORTS.map(x=>[x.id,x.fb])); return calc(r); });
+  const maxScore = Math.max(0.01,...rows.map(r=>r.score));
+  // key per sort; missing data always sinks to the bottom
+  const key = {name:r=>r.name, score:r=>r.score||null, cond:r=>r.cond?COND_RANK[r.cond]*1000+(r.h72||0):null, h24:r=>r.h24, fresh:r=>r.h72, drive:r=>r.drive, price:r=>r.cost}[S.sort] || (r=>r.score||null);
+  const sign = S.dir==="asc"?1:-1;
+  rows.sort((a,b)=>{const x=key(a),y=key(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return (typeof x==="string" ? x.localeCompare(y) : x-y)*sign || a.name.localeCompare(b.name);});
+
+  const top = [...rows].sort((a,b)=>b.score-a.score)[0];
+  const from = document.getElementById("origin").selectedOptions[0].text.split(" /")[0];
+  document.getElementById("best").innerHTML = top.score ? `
+    <span class="tag">Best bet</span>
+    <div class="name">${top.name} <span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf?`<span class="conf ${top.conf.lvl}">${top.conf.short}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
+    <div class="stats">
+      <div class="stat"><b class="fresh">${inch(top.h24)}</b><small>24h</small></div>
+      <div class="stat"><b class="fresh">${inch(top.h72)}</b><small>72h</small></div>
+      <div class="stat"><b>${fmt(top.drive)}</b><small>${top.chain?`Drive R${top.chain}`:"Drive"}</small></div>
+      <div class="stat">${top.covered?`<b class="onpass">On pass</b><small>${top.passes.filter(p=>S.owned.includes(p))[0]}</small>`:`<b>$${top.price}</b><small>Ticket</small>`}</div>
+    </div>`
+    : `<span class="tag">Best bet</span><div class="why">Waiting for snow and route data…</div>`;
+
+  const chainCell = r => r.chain ? `<span class="chain R${r.chain}">R${r.chain}</span>` : "";
+  const COLS = [["name","Name",""],["cond","Conditions","c-cond"],["h24","24h",""],["fresh","72h",""],["drive","Drive",""],["price","Price",""],["score","Worth it","c-score"]];
+  const chev = d => `<svg class="chev" viewBox="0 0 9 6" aria-hidden="true"><path d="${d==="asc"?"M1 5L4.5 1.5 8 5":"M1 1l3.5 3.5L8 1"}" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`;
+  const head = `<div class="row head" role="row">${COLS.map(([k,l,c])=>{const on=S.sort===k;
+    return `<button type="button" class="th ${c}" data-k="${k}" aria-sort="${on?(S.dir==="asc"?"ascending":"descending"):"none"}" title="Sort by ${l}">${on?chev(S.dir):""}<span>${l}</span><span class="dd" aria-hidden="true">⌄</span></button>`}).join("")}<span></span></div>`;
+  document.getElementById("board").innerHTML = head + rows.map(r=>{
+    const open = S.open===r.id;
+    const condChip = r.cond ? `<span class="cond ${r.cond}">${COND[r.cond]}</span>` : `<span class="unk">${LIVE.feeds.snow==="err"?"no snow data":"loading"}</span>`;
+    const confChip = r.conf ? `<span class="conf ${r.conf.lvl}">${r.conf.short}</span>` : "";
+    return `<button type="button" class="row ${S.owned.length && !r.covered?"dim":""}" data-id="${r.id}" aria-expanded="${open}">
+      <div class="c-name"><div class="rname">${r.name}</div><div class="rmeta">${r.cond?`<span class="cond ${r.cond} m-only">${COND[r.cond]}</span>`:""}${r.rain?`<span class="rain m-only" style="margin:0">Rain</span>`:""}<span class="m-only">${confChip}</span>${r.score?`<span class="pass m-only">Worth ${r.score.toFixed(1)}</span>`:""}${r.passes.length?r.passes.map(p=>`<span class="pass ${S.owned.includes(p)?"own":""}">${p}</span>`).join(""):`<span class="pass">Independent</span>`}</div></div>
+      <div class="c-cond">${condChip}${r.rain?`<br><span class="rain">Rain at base</span>`:""}<div style="margin-top:5px">${confChip}</div></div>
+      <div class="num fresh cell c-24" data-l="24h">${inch(r.h24)}</div>
+      <div class="num fresh cell c-72" data-l="72h">${inch(r.h72)}</div>
+      <div class="num cell c-drive" data-l="Drive">${fmt(r.drive)}${chainCell(r)}<small>${CORRIDOR[r.corr].split(" ")[0]}${routesFailed?" · typical":""}</small></div>
+      <div class="num cell c-price" data-l="Ticket">${r.covered?`<span class="price onpass">Pass</span><small>($${r.price})</small>`:`$${r.price}<small>est.</small>`}</div>
+      <div class="c-score"><span class="num">${r.score?r.score.toFixed(1):"—"}</span><div class="meter"><i style="width:${(r.score/maxScore*100).toFixed(0)}%"></i></div></div>
+      <span class="caret" aria-hidden="true">▸</span>
+    </button>
+    ${open?`<div class="detail">
+      <div><h3>Daily snowfall, last 7 days</h3>${r.sn?bars(r.sn):`<p class="unk">Snow data not loaded.</p>`}<div class="label" style="margin-top:6px">24h ${inch(r.h24)} · 72h ${inch(r.h72)} · dark bars = last 3 days</div></div>
+      <div><h3>Measured nearby</h3>${r.st && r.st.depth!=null ? `<div class="obs">
+          <b>${r.st.depth}"</b> on the ground at <b>${r.st.name}</b>, ${Math.round(r.st.ft).toLocaleString()} ft, ${r.st.km} km away.<br>
+          Depth change: <b>${r.st.d24==null?"—":(r.st.d24>0?"+":"")+r.st.d24+'"'}</b> 24h · <b>${r.st.d72==null?"—":(r.st.d72>0?"+":"")+r.st.d72+'"'}</b> 72h · reading ${r.st.date}</div>`
+        : `<div class="obs">${LIVE.feeds.stations==="err"?"Station feed unavailable.":LIVE.stations?"No SNOTEL station within 30 km.":"Loading…"}</div>`}
+        ${r.conf?`<div style="margin-top:8px"><span class="conf ${r.conf.lvl}">${r.conf.label==="Model only"||r.conf.label==="Partial"?r.conf.short:r.conf.label+" confidence"}</span><div class="why">${r.conf.why}</div></div>`:""}
+        <h3>Live from the mountain</h3><div class="links">
+          <a href="https://${SITES[r.id]}" target="_blank" rel="noopener">Resort site</a>
+          <a href="https://www.google.com/search?q=${encodeURIComponent(r.name+" snow report")}" target="_blank" rel="noopener">Snow report</a>
+          <a href="https://www.google.com/search?q=${encodeURIComponent(r.name+" webcams")}" target="_blank" rel="noopener">Webcams</a>
+          ${r.st?`<a href="https://wcc.sc.egov.usda.gov/nwcc/site?sitenum=${r.st.id}" target="_blank" rel="noopener">Station data</a>`:""}
+        </div>
+      </div>
+      <div><h3>Trip</h3><dl>
+        <dt>Conditions</dt><dd>${condChip}</dd>
+        <dt>Area</dt><dd>${r.area}</dd>
+        <dt>Route</dt><dd>${CORRIDOR[r.corr]}</dd>
+        <dt>Chains</dt><dd>${LIVE.chains==null?"Feed unavailable":r.chain?`R${r.chain} · +${CHAIN_MIN[r.chain]} min`:LIVE.chains[r.corr]===0?"No controls":"No report for this road"}</dd>
+        <dt>Drive</dt><dd>${fmt(r.drive)} (${WHEN.find(w=>w.id===S.when).label})</dd>
+        <dt>Base</dt><dd>${r.baseIn!=null?`${r.baseIn}" modeled`:"—"} · lodge ${Math.round(r.baseElev*3.281/100)*100} ft</dd>
+        <dt>Snow level</dt><dd>${r.snowLvl?`${r.snowLvl[0].toLocaleString()}–${r.snowLvl[1].toLocaleString()} ft next 24h${r.rain?" · rain likely at base":""}`:"—"}</dd>
+        <dt>Ticket</dt><dd>${r.covered?`On your pass (walk-up ~$${r.price})`:`~$${r.price} walk-up; cheaper online ahead`}</dd>
+        <dt>Pass</dt><dd>${r.covered?`Covered by ${r.passes.filter(p=>S.owned.includes(p)).join(", ")}`:r.passes.length?`On ${r.passes.join(", ")}, not one you hold`:"Independent"}</dd>
+      </dl></div>
+    </div>`:""}`;
+  }).join("");
+}
+document.getElementById("origin").onchange = e=>{S.origin=e.target.value; store.set("origin",S.origin);
+  run("drive","drive_"+S.origin,()=>loadDrive(S.origin),v=>LIVE.drive[S.origin]=v);};
+document.getElementById("msort").onchange = e=>{S.sort=e.target.value; store.set("xsort",S.sort); render();};
+document.getElementById("mdir").onclick = ()=>{S.dir = S.dir==="asc"?"desc":"asc"; store.set("xdir",S.dir); render();};
+document.getElementById("board").onclick = e=>{
+  const th=e.target.closest(".th");
+  if(th){ const k=th.dataset.k; S.dir = S.sort===k ? (S.dir==="asc"?"desc":"asc") : "asc"; S.sort=k; store.set("xsort",S.sort); store.set("xdir",S.dir); render(); return; }
+  const b=e.target.closest(".row[data-id]"); if(!b) return; S.open = S.open===b.dataset.id?null:b.dataset.id; render();};
+render(); loadAll(false);
+setInterval(renderFeeds, 60000);
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  // When a new version's service worker takes over, reload once so the update shows now.
+  // Skipped on first install (nothing was in control before).
+  const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{ if(!hadController || reloaded) return; reloaded = true; location.reload(); });
+  navigator.serviceWorker.register("sw.js").then(reg=>{
+    // iOS home-screen apps rarely re-check for updates on their own: check on every return to the app.
+    document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
+  }).catch(()=>{});
+}
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) loadAll(false); });
+</script>
+
+</body></html>
