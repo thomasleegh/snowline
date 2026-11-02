@@ -213,6 +213,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
+const BUILD = "8 · Nov 1";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy"];
 // lat/lon near mid-mountain; elev in meters for the snow model; road = parking-lot point for routing
 const RESORTS = [
@@ -453,7 +454,7 @@ function renderFeeds(){
     f("stations","Stations","NRCS SNOTEL","unavailable ("+(LIVE.err.stations||"")+")") +
     f("chains","Chains","Caltrans",`blocked by browser · <a href="https://quickmap.dot.ca.gov/" target="_blank" rel="noopener">check QuickMap</a>`) +
     `<span class="feed est"><i></i>Prices <small>estimates</small></span>` +
-    `<button type="button" id="refresh">Refresh</button>`;
+    `<button type="button" id="refresh">Refresh</button>` + `<span class="feed" style="flex-basis:100%"><small>Build ${BUILD}</small></span>`;
   document.getElementById("refresh").onclick = ()=>loadAll(true);
 }
 function bars(sn){

@@ -113,6 +113,10 @@ await test('snow still loads if Open-Meteo rejects the rain-at-base fields', asy
   assert(/\bok\b/.test(st), 'snow feed should recover by retrying without those fields');
 }, {mode:'om400'});
 
+await test('build number shows so the phone can confirm an update landed', async page => {
+  assert(/Build \d+/.test(await page.textContent('#feeds')), 'build label missing');
+});
+
 // ---------- data shown ----------
 await test('every resort shows a condition badge and confidence chip', async page => {
   const n = await page.$$eval('.row[data-id]', rows => rows.filter(r => r.querySelector('.cond') && r.querySelector('.conf')).length);
