@@ -24,8 +24,18 @@ const server = http.createServer((req, res) => {
 const BASE = `http://localhost:${server.address().port}/`;
 
 // ---------- mock data ----------
+// Every test runs on a fixed day so results don't drift as the real season goes on.
+// Nov 30, 2026: Mammoth/Heavenly/Northstar/Mt. Rose/Palisades/Bear Valley/Boreal/China Peak/Sugar Bowl past their
+// projected opening days; Kirkwood (Dec 4) and later not yet.
+const NOW = Date.parse('2026-11-30T20:00:00Z');
+// Liftie mock: Palisades open, Heavenly past opening but no lifts turning, Kirkwood not open yet; others 404.
+const LIFTIE = {
+  palisades: {lifts:{stats:{open:5, hold:1, scheduled:0, closed:6}}},
+  heavenly:  {lifts:{stats:{open:0, hold:0, scheduled:0, closed:28}}},
+  kirkwood:  {lifts:{stats:{open:0, hold:0, scheduled:0, closed:15}}, opening:'2026-12-04'},
+};
 function meteo(n){
-  const hours = [], t0 = new Date(Date.now() - 7*864e5); t0.setUTCMinutes(0,0,0);
+  const hours = [], t0 = new Date(NOW - 7*864e5); t0.setUTCMinutes(0,0,0);
   for(let i=0;i<24*9;i++) hours.push(new Date(t0.getTime()+i*3600e3-8*3600e3).toISOString().slice(0,13)+':00');
   const days = [...new Set(hours.map(h=>h.slice(0,10)))];
   return Array.from({length:n}, (_,i)=>({
@@ -44,13 +54,18 @@ const STATIONS = [
   {stationTriplet:'652:NV:SNTL',name:'Mt Rose Ski Area',latitude:39.32,longitude:-119.89,elevation:8800},
 ];
 function stationData(){
-  const dates=[]; for(let k=6;k>=0;k--) dates.push(new Date(Date.now()-k*864e5).toISOString().slice(0,10));
+  const dates=[]; for(let k=6;k>=0;k--) dates.push(new Date(NOW-k*864e5).toISOString().slice(0,10));
   return STATIONS.map((s,i)=>({stationTriplet:s.stationTriplet, data:[{stationElement:{elementCode:'SNWD'},
     values:dates.map((d,k)=>({date:d, value:k<4?2:2+i*1.5}))}]}));
 }
 
 // mode: 'ok' = every feed answers; 'blocked' = every outside request fails; 'om400' = Open-Meteo rejects the rain fields
 async function mockFeeds(page, mode='ok'){
+  await page.route(BASE + 'proxy/liftie/**', route => {
+    if(mode==='blocked') return route.abort('failed');
+    const id = route.request().url().split('/proxy/liftie/')[1];
+    return LIFTIE[id] ? route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(LIFTIE[id])}) : route.fulfill({status:404, body:''});
+  });
   await page.route(u => !u.href.startsWith(BASE), async route => {
     const u = route.request().url();
     const J = (o, status=200) => route.fulfill({status, contentType:'application/json', headers:{'access-control-allow-origin':'*'}, body:JSON.stringify(o)});
@@ -78,6 +93,7 @@ async function test(name, fn, {mode='ok', width=390, height=844, dark=true}={}){
   page.on('pageerror', e => errors.push(e.message));
   try{
     await mockFeeds(page, mode);
+    await page.clock.setFixedTime(NOW);
     await page.goto(BASE + 'index.html');
     await page.waitForFunction(() => !document.querySelector('.feed.load'), null, {timeout:10000});
     await fn(page);
@@ -95,7 +111,7 @@ const assert = (c, m) => { if(!c) throw new Error(m); };
 // ---------- feeds ----------
 await test('all feeds load and go green', async page => {
   const states = await page.$$eval('.feed', els => els.map(e => e.className));
-  assert(states.filter(c=>/\bok\b/.test(c)).length === 4, 'expected snow, routes, stations, chains all ok: ' + states.join(','));
+  assert(states.filter(c=>/\bok\b/.test(c)).length === 5, 'expected snow, routes, stations, lifts, chains all ok: ' + states.join(','));
 });
 await test('"No live data" banner stays hidden when feeds work (2026-11-01 bug)', async page => {
   assert(await page.isHidden('#blocked'), 'banner is visible even though feeds loaded');
@@ -169,16 +185,56 @@ await test('detail links: webcams (OpenSnow), buy tickets, resort site', async p
   assert(!hrefs.some(h => h.includes('google.com')), 'no search-engine stand-ins');
 });
 
+// ---------- open / closed ----------
+await test('open resorts first, unknown next, not-open-yet last (2026-11-03)', async page => {
+  const ranks = await page.$$eval('.row[data-id] .c-name .lift', els => els.map(e => e.classList.contains('open')?0:e.classList.contains('unk')?1:2));
+  assert(ranks.length === 19, 'every card needs a lift status chip, got ' + ranks.length);
+  assert(ranks.every((r,i) => i===0 || r >= ranks[i-1]), 'groups out of order: ' + ranks.join(''));
+  assert(await page.getAttribute('.row[data-id]', 'data-id') === 'pal', 'Palisades (only open resort) should be first');
+  assert(/Open · 6\/12 lifts/.test(await page.textContent('.row[data-id="pal"]')), 'Palisades should show 6/12 lifts (open + hold)');
+});
+await test('closed and not-yet-open states are labeled correctly', async page => {
+  assert(/Closed now/.test(await page.textContent('.row[data-id="hev"] .lift')), 'Heavenly: past opening, no lifts -> Closed now');
+  assert(/Opens Dec 4/.test(await page.textContent('.row[data-id="kir"] .lift')), 'Kirkwood: Liftie opening date');
+  assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'Dodge Ridge: projected date, no Liftie');
+  assert(/No live lift data/.test(await page.textContent('.row[data-id="bvl"] .lift')), 'Bear Valley: past projected date, no Liftie -> unknown');
+});
+await test('group headers separate open / unknown / not open', async page => {
+  const g = await page.$$eval('.grp', els => els.map(e => e.textContent));
+  assert(g.join('|') === 'Open now|Status unknown|Not open yet', 'headers: ' + g.join('|'));
+});
+await test('open-first ordering holds under every sort and direction', async page => {
+  for(const k of ['price','drive','fresh','name','score']){
+    await page.selectOption('#msort', k);
+    for(let flip=0; flip<2; flip++){
+      const first = await page.getAttribute('.row[data-id]', 'data-id');
+      assert(first === 'pal', `sort ${k}: open resort should stay on top, got ${first}`);
+      await page.click('#mdir');
+    }
+  }
+});
+await test('Best bet picks an open resort', async page => {
+  assert(/PALISADES|Palisades/.test(await page.textContent('.best .name')), 'best bet should be the open resort');
+});
+await test('lift feed down: falls back to opening dates, says so', async page => {
+  assert(/Lifts unavailable/.test(await page.textContent('#feeds')), 'status bar should say lifts unavailable');
+  assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'still shows projected dates');
+}, {mode:'blocked'});
+
 // ---------- sorting ----------
 await test('phone sort: price low to high, then flip', async page => {
   await page.selectOption('#msort', 'price');
   if(!/Low/.test(await page.textContent('#mdir'))) await page.click('#mdir');
   // no passes by default: cheapest day ticket first (Badger Pass $64, then Soda Springs $89)
   const order = await page.$$eval('.row[data-id]', rs => rs.map(r => r.dataset.id));
-  assert(order[0] === 'bdg' && order[1] === 'sod', 'cheapest first, got ' + order.slice(0,3).join(','));
+  // open resorts stay on top; within 'not open yet', cheapest first (Badger Pass $64, Soda Springs $89)
+  const notOpen = order.filter(id => !['pal','nst','ros','mam','bvl','bor','chp','sug','hev'].includes(id));
+  assert(order[0] === 'pal', 'open resort first, got ' + order[0]);
+  assert(notOpen[0] === 'bdg' && notOpen[1] === 'sod', 'cheapest not-open first, got ' + notOpen.slice(0,3).join(','));
   await page.click('#mdir');
   const top = await page.getAttribute('.row[data-id]', 'data-id');
-  assert(top !== 'bdg', 'flipping direction should change the order');
+  const order2 = await page.$$eval('.row[data-id]', rs => rs.map(r => r.dataset.id));
+  assert(order2.join() !== order.join(), 'flipping direction should change the order');
 });
 await test('desktop: clicking a column header sorts, clicking again flips', async page => {
   await page.click('.th[data-k="drive"]');
@@ -199,6 +255,11 @@ await test('phone: the four stats in each card line up across cards (2026-11-01 
 await test('phone: resort names and stat labels are not cut off', async page => {
   const clipped = await page.$$eval('.rname, .stat small, .cell', els => els.filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent.trim().slice(0,20)));
   assert(!clipped.length, 'clipped: ' + clipped.join(', '));
+});
+await test('phone: drive times never break across lines, even with a chain chip (2026-11-03)', async page => {
+  const broken = await page.$$eval('.row[data-id] .c-drive .dt', els => els.filter(e => e.getClientRects().length > 1).map(e => e.textContent));
+  assert(!broken.length, 'drive time wrapped: ' + broken.join(', '));
+  assert(await page.$('.row[data-id="pal"] .c-drive .chain'), 'test needs a resort with a chain chip (Palisades, I-80 R2)');
 });
 await test('phone: header row hidden, sort bar visible', async page => {
   assert(await page.isHidden('.row.head') && await page.isVisible('.msort'), 'wrong sort control on phone');

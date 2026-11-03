@@ -74,6 +74,12 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 .cond.med{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
 .cond.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
 .price.onpass{color:var(--good)}
+.dt{white-space:nowrap}
+.lift{display:inline-flex;align-items:center;gap:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 6px;border-radius:3px;white-space:nowrap;margin-bottom:4px}
+.lift.open{color:#fff;background:var(--good)}
+.lift.unk{color:var(--warn);border:1px solid currentColor}
+.lift.shut{color:var(--muted);border:1px solid var(--line)}
+.grp{padding:10px 16px 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--bg);border-top:1px solid var(--line)}
 .rain{display:inline-block;margin-top:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 5px;border-radius:3px;color:var(--snow);border:1px dashed var(--snow)}
 .m-only{display:none}
 .row{display:grid;grid-template-columns:minmax(0,2fr) 1.1fr .7fr .7fr 1fr .8fr 1fr 22px;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);width:100%;text-align:left;background:none;border-left:0;border-right:0;border-bottom:0}
@@ -198,6 +204,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
         <li><b>Chains</b>: Caltrans CWWP2 chain-control feed for I-80, US-50, CA-88, CA-4 and CA-108. R1 adds ~15 min, R2 ~35, R3 ~60.</li>
         <li><b>Price</b>: "listed" = adult weekday price listed on OnTheSnow for 2026-27; "est." = my estimate. Weekends and holidays cost more. No resort publishes a price feed.</li>
         <li><b>Confidence</b>: compares the model's 72h snowfall with the measured snow-depth rise at the nearest NRCS SNOTEL station within 30 km. Agreement = High, same direction = Medium, disagreement or no station = Low. Fresh snow settles, so depth usually rises 60–90% of what fell.</li>
+        <li><b>Open / closed</b>: live lift counts from Liftie (liftie.info) for 14 resorts; Soda Springs, Bear Valley, Dodge Ridge, Badger Pass and Mt. Shasta use announced or projected opening dates. Open resorts sort to the top, not-yet-open to the bottom, and Best bet picks from open resorts when any are open.</li>
         <li><b>Passes</b>: 2025-26 lineups. Confirm 2026-27 before relying on them.</li>
       </ol>
     </section>
@@ -213,30 +220,31 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "10 · Nov 1";
+const BUILD = "11 · Nov 3";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
 // lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
+// opens: 2026-27 announced/projected opening day (SnowBrains/OnTheSnow, Oct 2026); liftie: liftie.info resort id for live lift status.
 // passes: 2026-27 lineups. price: ps:"listed" = OnTheSnow weekday adult price, otherwise a peak-weekend estimate.
 const RESORTS = [
-  {id:"pal",baseElev:1890,name:"Palisades Tahoe",area:"North Lake · Olympic Valley",corr:"I80",passes:["Ikon"],lat:39.192,lon:-120.258,elev:2300,road:[39.1968,-120.2354],price:269,ps:"listed",fb:225,cam:"palisadestahoe"},
-  {id:"nst",baseElev:1930,name:"Northstar",area:"North Lake · Truckee",corr:"I80",passes:["Epic"],lat:39.262,lon:-120.130,elev:2400,road:[39.2746,-120.1210],price:237,ps:"listed",fb:230,cam:"northstar"},
-  {id:"sug",baseElev:2100,name:"Sugar Bowl",area:"Donner Summit",corr:"I80",passes:["Mountain Collective"],lat:39.292,lon:-120.348,elev:2300,road:[39.3039,-120.3355],price:249,ps:"listed",fb:200,cam:"sugarbowl"},
-  {id:"bor",baseElev:2200,name:"Boreal",area:"Donner Summit",corr:"I80",passes:[],lat:39.331,lon:-120.352,elev:2200,road:[39.3364,-120.3497],price:144,ps:"listed",fb:195,cam:"boreal"},
-  {id:"sod",baseElev:2042,name:"Soda Springs",area:"Donner Summit · beginner-friendly",corr:"I80",passes:[],lat:39.322,lon:-120.380,elev:2100,road:[39.3224,-120.3794],price:89,ps:"listed",fb:200,cam:"sodasprings",ticket:"onthesnow.com/california/soda-springs/lift-tickets"},
-  {id:"dsr",baseElev:2143,name:"Donner Ski Ranch",area:"Donner Summit",corr:"I80",passes:["Indy"],lat:39.318,lon:-120.330,elev:2250,road:[39.3183,-120.3296],price:119,ps:"listed",fb:200,cam:"donnerskiranch",ticket:"onthesnow.com/california/donner-ski-ranch/lift-tickets"},
-  {id:"hom",baseElev:1899,name:"Homewood",area:"West Shore · opening TBD for 2026-27",corr:"I80",passes:[],lat:39.085,lon:-120.165,elev:2150,road:[39.0858,-120.1601],price:139,fb:235,cam:"homewood",site:"skihomewood.com",flag:"Opening not announced"},
-  {id:"dmp",baseElev:2042,name:"Diamond Peak",area:"Incline Village · NV",corr:"I80",passes:[],lat:39.254,lon:-119.920,elev:2300,road:[39.2545,-119.9227],price:149,fb:245,cam:"diamondpeak",site:"diamondpeak.com",ticket:"www.diamondpeak.com/tickets-passes-rentals/lift-tickets/"},
-  {id:"ros",baseElev:2520,name:"Mt. Rose",area:"Reno side · via I-80",corr:"I80",passes:[],lat:39.318,lon:-119.880,elev:2600,road:[39.3150,-119.8850],price:189,fb:260,cam:"mtrose"},
-  {id:"kir",baseElev:2380,name:"Kirkwood",area:"Carson Pass",corr:"SR88",passes:["Epic"],lat:38.672,lon:-120.070,elev:2500,road:[38.6847,-120.0652],price:199,fb:220,cam:"kirkwood"},
-  {id:"sat",baseElev:2025,name:"Sierra-at-Tahoe",area:"Echo Summit · Ikon days limited",corr:"US50",passes:["Ikon"],lat:38.794,lon:-120.082,elev:2300,road:[38.7990,-120.0809],price:150,ps:"listed",fb:220,cam:"sierraattahoe"},
-  {id:"hev",baseElev:1990,name:"Heavenly",area:"South Lake Tahoe",corr:"US50",passes:["Epic"],lat:38.926,lon:-119.906,elev:2700,road:[38.9353,-119.9400],price:289,fb:250,cam:"heavenly"},
-  {id:"bvl",baseElev:2010,name:"Bear Valley",area:"Ebbetts Pass · Hwy 4",corr:"SR4",passes:["Indy","Cali Pass"],lat:38.475,lon:-120.033,elev:2300,road:[38.4680,-120.0400],price:139,ps:"listed",fb:210,cam:"bearvalley"},
-  {id:"dod",baseElev:2010,name:"Dodge Ridge",area:"Sonora Pass · Hwy 108 · closest to the Bay",corr:"SR108",passes:["Indy","Cali Pass"],lat:38.182,lon:-119.953,elev:2300,road:[38.1880,-119.9570],price:159,ps:"listed",fb:200,cam:"dodgeridge"},
-  {id:"bdg",baseElev:2195,name:"Badger Pass",area:"Yosemite · park entry fee · opens irregularly",corr:"SR41",passes:[],lat:37.662,lon:-119.663,elev:2300,road:[37.6630,-119.6633],price:64,ps:"listed",fb:250,cam:"badgerpass",site:"travelyosemite.com/winter/badger-pass-ski-area/",flag:"Opens only in good snow years"},
-  {id:"chp",baseElev:2143,name:"China Peak",area:"Huntington Lake · via Fresno",corr:"SR168",passes:["Indy","Cali Pass"],lat:37.236,lon:-119.157,elev:2450,road:[37.2353,-119.1551],price:119,ps:"listed",fb:270,cam:"chinapeak",ticket:"onthesnow.com/california/ski-china-peak/lift-tickets"},
-  {id:"mam",baseElev:2424,name:"Mammoth",area:"Eastern Sierra · via US-50 & 395",corr:"US50",passes:["Ikon"],lat:37.635,lon:-119.030,elev:2900,road:[37.6510,-119.0270],price:239,fb:410,via:[38.9541,-119.7660],cam:"mammothmountain"},
-  {id:"jun",baseElev:2300,name:"June Mountain",area:"Eastern Sierra · near Mammoth",corr:"US50",passes:["Ikon"],lat:37.767,lon:-119.090,elev:2650,road:[37.7678,-119.0906],price:129,fb:400,via:[38.9541,-119.7660],cam:"junemountain",site:"junemountain.com"},
-  {id:"sha",baseElev:1676,name:"Mt. Shasta Ski Park",area:"Far north · I-5",corr:"I5",passes:["Indy"],lat:41.316,lon:-122.203,elev:1900,road:[41.3197,-122.2032],price:99,ps:"listed",fb:300,cam:"mtshastaskipark",ticket:"onthesnow.com/california/mount-shasta-board-ski-park/lift-tickets"},
+  {id:"pal",opens:"2026-11-25",liftie:"palisades",baseElev:1890,name:"Palisades Tahoe",area:"North Lake · Olympic Valley",corr:"I80",passes:["Ikon"],lat:39.192,lon:-120.258,elev:2300,road:[39.1968,-120.2354],price:269,ps:"listed",fb:225,cam:"palisadestahoe"},
+  {id:"nst",opens:"2026-11-20",liftie:"northstar",baseElev:1930,name:"Northstar",area:"North Lake · Truckee",corr:"I80",passes:["Epic"],lat:39.262,lon:-120.130,elev:2400,road:[39.2746,-120.1210],price:237,ps:"listed",fb:230,cam:"northstar"},
+  {id:"sug",opens:"2026-11-27",liftie:"sugarbowl",baseElev:2100,name:"Sugar Bowl",area:"Donner Summit",corr:"I80",passes:["Mountain Collective"],lat:39.292,lon:-120.348,elev:2300,road:[39.3039,-120.3355],price:249,ps:"listed",fb:200,cam:"sugarbowl"},
+  {id:"bor",opens:"2026-11-27",liftie:"boreal",baseElev:2200,name:"Boreal",area:"Donner Summit",corr:"I80",passes:[],lat:39.331,lon:-120.352,elev:2200,road:[39.3364,-120.3497],price:144,ps:"listed",fb:195,cam:"boreal"},
+  {id:"sod",opens:"2026-12-18",baseElev:2042,name:"Soda Springs",area:"Donner Summit · beginner-friendly",corr:"I80",passes:[],lat:39.322,lon:-120.380,elev:2100,road:[39.3224,-120.3794],price:89,ps:"listed",fb:200,cam:"sodasprings",ticket:"onthesnow.com/california/soda-springs/lift-tickets"},
+  {id:"dsr",opens:"2026-12-11",liftie:"donner-ski-ranch",baseElev:2143,name:"Donner Ski Ranch",area:"Donner Summit",corr:"I80",passes:["Indy"],lat:39.318,lon:-120.330,elev:2250,road:[39.3183,-120.3296],price:119,ps:"listed",fb:200,cam:"donnerskiranch",ticket:"onthesnow.com/california/donner-ski-ranch/lift-tickets"},
+  {id:"hom",opens:"2026-12-11",liftie:"homewood",baseElev:1899,name:"Homewood",area:"West Shore · opening TBD for 2026-27",corr:"I80",passes:[],lat:39.085,lon:-120.165,elev:2150,road:[39.0858,-120.1601],price:139,fb:235,cam:"homewood",site:"skihomewood.com",flag:"Opening not announced"},
+  {id:"dmp",opens:"2026-12-18",liftie:"diamondpeak",baseElev:2042,name:"Diamond Peak",area:"Incline Village · NV",corr:"I80",passes:[],lat:39.254,lon:-119.920,elev:2300,road:[39.2545,-119.9227],price:149,fb:245,cam:"diamondpeak",site:"diamondpeak.com",ticket:"www.diamondpeak.com/tickets-passes-rentals/lift-tickets/"},
+  {id:"ros",opens:"2026-11-20",liftie:"mtrose",baseElev:2520,name:"Mt. Rose",area:"Reno side · via I-80",corr:"I80",passes:[],lat:39.318,lon:-119.880,elev:2600,road:[39.3150,-119.8850],price:189,fb:260,cam:"mtrose"},
+  {id:"kir",opens:"2026-12-04",liftie:"kirkwood",baseElev:2380,name:"Kirkwood",area:"Carson Pass",corr:"SR88",passes:["Epic"],lat:38.672,lon:-120.070,elev:2500,road:[38.6847,-120.0652],price:199,fb:220,cam:"kirkwood"},
+  {id:"sat",opens:"2026-12-26",liftie:"sierra",baseElev:2025,name:"Sierra-at-Tahoe",area:"Echo Summit · Ikon days limited",corr:"US50",passes:["Ikon"],lat:38.794,lon:-120.082,elev:2300,road:[38.7990,-120.0809],price:150,ps:"listed",fb:220,cam:"sierraattahoe"},
+  {id:"hev",opens:"2026-11-20",liftie:"heavenly",baseElev:1990,name:"Heavenly",area:"South Lake Tahoe",corr:"US50",passes:["Epic"],lat:38.926,lon:-119.906,elev:2700,road:[38.9353,-119.9400],price:289,fb:250,cam:"heavenly"},
+  {id:"bvl",opens:"2026-11-27",baseElev:2010,name:"Bear Valley",area:"Ebbetts Pass · Hwy 4",corr:"SR4",passes:["Indy","Cali Pass"],lat:38.475,lon:-120.033,elev:2300,road:[38.4680,-120.0400],price:139,ps:"listed",fb:210,cam:"bearvalley"},
+  {id:"dod",opens:"2026-12-26",baseElev:2010,name:"Dodge Ridge",area:"Sonora Pass · Hwy 108 · closest to the Bay",corr:"SR108",passes:["Indy","Cali Pass"],lat:38.182,lon:-119.953,elev:2300,road:[38.1880,-119.9570],price:159,ps:"listed",fb:200,cam:"dodgeridge"},
+  {id:"bdg",opens:"2026-12-26",baseElev:2195,name:"Badger Pass",area:"Yosemite · park entry fee · opens irregularly",corr:"SR41",passes:[],lat:37.662,lon:-119.663,elev:2300,road:[37.6630,-119.6633],price:64,ps:"listed",fb:250,cam:"badgerpass",site:"travelyosemite.com/winter/badger-pass-ski-area/",flag:"Opens only in good snow years"},
+  {id:"chp",opens:"2026-11-27",liftie:"chinapeak",baseElev:2143,name:"China Peak",area:"Huntington Lake · via Fresno",corr:"SR168",passes:["Indy","Cali Pass"],lat:37.236,lon:-119.157,elev:2450,road:[37.2353,-119.1551],price:119,ps:"listed",fb:270,cam:"chinapeak",ticket:"onthesnow.com/california/ski-china-peak/lift-tickets"},
+  {id:"mam",opens:"2026-11-13",liftie:"mammoth-lakes",baseElev:2424,name:"Mammoth",area:"Eastern Sierra · via US-50 & 395",corr:"US50",passes:["Ikon"],lat:37.635,lon:-119.030,elev:2900,road:[37.6510,-119.0270],price:239,fb:410,via:[38.9541,-119.7660],cam:"mammothmountain"},
+  {id:"jun",opens:"2026-12-19",liftie:"june-mountain",baseElev:2300,name:"June Mountain",area:"Eastern Sierra · near Mammoth",corr:"US50",passes:["Ikon"],lat:37.767,lon:-119.090,elev:2650,road:[37.7678,-119.0906],price:129,fb:400,via:[38.9541,-119.7660],cam:"junemountain",site:"junemountain.com"},
+  {id:"sha",opens:"2026-12-26",baseElev:1676,name:"Mt. Shasta Ski Park",area:"Far north · I-5",corr:"I5",passes:["Indy"],lat:41.316,lon:-122.203,elev:1900,road:[41.3197,-122.2032],price:99,ps:"listed",fb:300,cam:"mtshastaskipark",ticket:"onthesnow.com/california/mount-shasta-board-ski-park/lift-tickets"},
 ];
 const SITES = {hom:"skihomewood.com",dmp:"diamondpeak.com",bdg:"travelyosemite.com/winter/badger-pass-ski-area/",jun:"junemountain.com",pal:"palisadestahoe.com",nst:"northstarcalifornia.com",sug:"sugarbowl.com",bor:"rideboreal.com",kir:"kirkwood.com",sat:"sierraattahoe.com",hev:"skiheavenly.com",ros:"skirose.com",bvl:"bearvalley.com",dod:"dodgeridge.com",mam:"mammothmountain.com"};
 const ORIGINS = {pa:[37.4419,-122.1430],sf:[37.7749,-122.4194],oak:[37.8044,-122.2712],sj:[37.3382,-121.8863]};
@@ -250,7 +258,7 @@ const COND = {good:"Good",med:"Fair",bad:"Poor"};
 
 const store = {get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 const S = {origin:store.get("origin","pa"), when:store.get("when","sat"), owned:store.get("owned",[]), sort:store.get("xsort","score"), dir:store.get("xdir","desc"), open:null};
-const LIVE = {snow:null, drive:{}, chains:null, feeds:{snow:"load",drive:"load",chains:"load",stations:"load"}, stations:null, at:{}, err:{}};
+const LIVE = {snow:null, drive:{}, chains:null, feeds:{snow:"load",drive:"load",chains:"load",stations:"load",lifts:"load"}, stations:null, lifts:null, at:{}, err:{}};
 const TTL = 30*60*1000;
 
 // ---------- Feeds ----------
@@ -399,6 +407,22 @@ async function loadStations(){
   return out;
 }
 
+// Live lift status from Liftie (liftie.info, open source). No CORS, so it goes through /proxy/liftie/.
+async function loadLifts(){
+  const ids = RESORTS.filter(r=>r.liftie);
+  const got = await Promise.allSettled(ids.map(r => getJSON(`proxy/liftie/${r.liftie}`, 15000)));
+  const out = {}; let ok = 0, lastErr = "";
+  got.forEach((g,i) => {
+    if(g.status !== "fulfilled"){ lastErr = g.reason?.message || "failed"; return; }
+    const st = g.value?.lifts?.stats || {};
+    const open = (st.open||0) + (st.hold||0), total = ["open","hold","scheduled","closed"].reduce((a,k)=>a+(st[k]||0),0);
+    out[ids[i].id] = {open, total, opening: typeof g.value?.opening === "string" ? g.value.opening : null};
+    ok++;
+  });
+  if(!ok) throw new Error(lastErr || "no resorts answered");
+  return out;
+}
+
 function cached(key){ const c=store.get(key,null); return c && Date.now()-c.t<TTL ? c : null; }
 async function run(name, key, fn, apply, force){
   const c = !force && cached(key);
@@ -413,6 +437,7 @@ function loadAll(force){
   run("drive","drive_"+S.origin,()=>loadDrive(S.origin),v=>LIVE.drive[S.origin]=v,force);
   run("chains","chains",loadChains,v=>LIVE.chains=v,force);
   run("stations","stations_obs",loadStations,v=>LIVE.stations=v,force);
+  run("lifts","lifts",loadLifts,v=>LIVE.lifts=v,force);
 }
 
 // ---------- Model ----------
@@ -420,6 +445,22 @@ const camUrl = r => `https://opensnow.com/location/${r.cam}/cams`;
 // OpenSnow snow report: lifts open in season + "Terrain Status" link to the resort's official lift page
 const liftUrl = r => `https://opensnow.com/location/${r.cam}/snow-report`;
 const ticketUrl = r => `https://${r.ticket || SITES[r.id]}`;
+// rank 0 = open, 1 = status unknown (past its opening date, no live data), 2 = not open
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const md = d => `${MON[+d.slice(5,7)-1]} ${+d.slice(8,10)}`;
+function openState(r){
+  const today = ymdLocal(new Date());
+  const lf = LIVE.lifts?.[r.id];
+  if(lf && lf.total){
+    if(lf.open > 0) return {rank:0, cls:"open", label:`Open · ${lf.open}/${lf.total} lifts`};
+    const od = lf.opening || r.opens;
+    if(od && od > today) return {rank:2, cls:"shut", label:`Opens ${md(od)}`};
+    return {rank:2, cls:"shut", label:"Closed now"};
+  }
+  if(r.opens && r.opens > today) return {rank:2, cls:"shut", label:`Opens ${md(r.opens)} (projected)`};
+  return {rank:1, cls:"unk", label: r.liftie ? "Lift status unavailable" : "No live lift data"};
+}
+const ymdLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 function confidence(sn, st){
   if(!sn) return null;
   if(!st || st.depth==null) return {lvl:"low", label:"Model only", short:"Model only", why:"No SNOTEL station within 30 km reports snow depth, so nothing measured backs up the model here. Check the resort's own report."};
@@ -444,7 +485,7 @@ function calc(r){
   const cond = sn==null ? null : ((h24>=6 || h72>=12) && baseIn>=24) ? "good" : (h72>=3 || baseIn>=30) ? "med" : "bad";
   const score = (sn && drive) ? ((h24*2 + h72*2 + baseIn/10) / (drive/60)) * (covered?1.25:1) : 0;
   const st = LIVE.stations?.[r.id] || null;
-  return {...r, st, conf: confidence(sn, LIVE.stations ? st : undefined), rain: sn?.rainRisk||false, snowLvl: sn?.snowLvl||null, sn, drive, chain, h24, h72, baseIn, covered, cond, cost:covered?0:r.price, score};
+  return {...r, os: openState(r), st, conf: confidence(sn, LIVE.stations ? st : undefined), rain: sn?.rainRisk||false, snowLvl: sn?.snowLvl||null, sn, drive, chain, h24, h72, baseIn, covered, cond, cost:covered?0:r.price, score};
 }
 const fmt = m => m==null ? "—" : `${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}`;
 const inch = v => v==null ? "—" : `${v<10&&v%1? v.toFixed(1): Math.round(v)}"`;
@@ -465,6 +506,7 @@ function renderFeeds(){
     f("snow","Snow","Open-Meteo","unavailable ("+(LIVE.err.snow||"")+")") +
     f("drive","Routes","OSRM","unavailable, showing typical times") +
     f("stations","Stations","NRCS SNOTEL","unavailable ("+(LIVE.err.stations||"")+")") +
+    f("lifts","Lifts","Liftie","unavailable ("+(LIVE.err.lifts||"")+"), using opening dates") +
     f("chains","Chains","Caltrans",`blocked by browser · <a href="https://quickmap.dot.ca.gov/" target="_blank" rel="noopener">check QuickMap</a>`) +
     `<span class="feed est"><i></i>Prices <small>estimates</small></span>` +
     `<button type="button" id="refresh">Refresh</button>` + `<span class="feed" style="flex-basis:100%"><small>Build ${BUILD}</small></span>`;
@@ -514,13 +556,14 @@ function render(){
   // key per sort; missing data always sinks to the bottom
   const key = {name:r=>r.name, score:r=>r.score||null, cond:r=>r.cond?COND_RANK[r.cond]*1000+(r.h72||0):null, h24:r=>r.h24, fresh:r=>r.h72, drive:r=>r.drive, price:r=>r.cost}[S.sort] || (r=>r.score||null);
   const sign = S.dir==="asc"?1:-1;
-  rows.sort((a,b)=>{const x=key(a),y=key(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return (typeof x==="string" ? x.localeCompare(y) : x-y)*sign || a.name.localeCompare(b.name);});
+  rows.sort((a,b)=>{ if(a.os.rank!==b.os.rank) return a.os.rank-b.os.rank; const x=key(a),y=key(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return (typeof x==="string" ? x.localeCompare(y) : x-y)*sign || a.name.localeCompare(b.name);});
 
-  const top = [...rows].sort((a,b)=>b.score-a.score)[0];
+  const bestRank = Math.min(...rows.map(r=>r.os.rank));
+  const top = [...rows].filter(r=>r.os.rank===bestRank).sort((a,b)=>b.score-a.score)[0];
   const from = document.getElementById("origin").selectedOptions[0].text.split(" /")[0];
   document.getElementById("best").innerHTML = top.score ? `
-    <span class="tag">Best bet</span>
-    <div class="name">${top.name} <span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf&&top.conf.label==="Model only"?`<span class="conf low">Model only</span>`:""}${top.flag?`<span class="conf med">${top.flag}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
+    <span class="tag">${bestRank===0?"Best bet":"Best bet · nothing open yet"}</span>
+    <div class="name">${top.name} <span class="lift ${top.os.cls}">${top.os.label}</span><span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf&&top.conf.label==="Model only"?`<span class="conf low">Model only</span>`:""}${top.flag?`<span class="conf med">${top.flag}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
     <div class="stats">
       <div class="stat"><b class="fresh">${inch(top.h24)}</b><small>24h</small></div>
       <div class="stat"><b class="fresh">${inch(top.h72)}</b><small>72h</small></div>
@@ -535,16 +578,18 @@ function render(){
   const chev = d => `<svg class="chev" viewBox="0 0 9 6" aria-hidden="true"><path d="${d==="asc"?"M1 5L4.5 1.5 8 5":"M1 1l3.5 3.5L8 1"}" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`;
   const head = `<div class="row head" role="row">${COLS.map(([k,l,c])=>{const on=S.sort===k;
     return `<button type="button" class="th ${c}" data-k="${k}" aria-sort="${on?(S.dir==="asc"?"ascending":"descending"):"none"}" title="Sort by ${l}">${on?chev(S.dir):""}<span>${l}</span><span class="dd" aria-hidden="true">⌄</span></button>`}).join("")}<span></span></div>`;
-  document.getElementById("board").innerHTML = head + rows.map(r=>{
+  const GRP = ["Open now","Status unknown","Not open yet"];
+  document.getElementById("board").innerHTML = head + rows.map((r,i)=>{
+    const grp = (i===0 || rows[i-1].os.rank!==r.os.rank) ? `<div class="grp" role="presentation">${GRP[r.os.rank]}</div>` : "";
     const open = S.open===r.id;
     const condChip = r.cond ? `<span class="cond ${r.cond}">${COND[r.cond]}</span>` : `<span class="unk">${LIVE.feeds.snow==="err"?"no snow data":"loading"}</span>`;
     const confChip = (r.conf&&r.conf.label==="Model only" ? `<span class="conf low">Model only</span>` : "") + (r.flag ? `<span class="conf med">${r.flag}</span>` : "");
-    return `<button type="button" class="row ${S.owned.length && !r.covered?"dim":""}" data-id="${r.id}" aria-expanded="${open}">
-      <div class="c-name"><div class="rname">${r.name}</div><div class="rmeta">${r.cond?`<span class="cond ${r.cond} m-only">${COND[r.cond]}</span>`:""}${r.rain?`<span class="rain m-only" style="margin:0">Rain</span>`:""}<span class="m-only">${confChip}</span>${r.score?`<span class="pass m-only">Worth ${r.score.toFixed(1)}</span>`:""}${r.passes.length?r.passes.map(p=>`<span class="pass ${S.owned.includes(p)?"own":""}">${p}</span>`).join(""):`<span class="pass">Independent</span>`}</div></div>
-      <div class="c-cond">${condChip}${r.rain?`<br><span class="rain">Rain at base</span>`:""}<div style="margin-top:5px">${confChip}</div></div>
+    return grp + `<button type="button" class="row ${S.owned.length && !r.covered?"dim":""}" data-id="${r.id}" aria-expanded="${open}">
+      <div class="c-name"><div class="rname">${r.name}</div><div class="rmeta"><span class="lift ${r.os.cls} m-only">${r.os.label}</span>${r.cond?`<span class="cond ${r.cond} m-only">${COND[r.cond]}</span>`:""}${r.rain?`<span class="rain m-only" style="margin:0">Rain</span>`:""}<span class="m-only">${confChip}</span>${r.score?`<span class="pass m-only">Worth ${r.score.toFixed(1)}</span>`:""}${r.passes.length?r.passes.map(p=>`<span class="pass ${S.owned.includes(p)?"own":""}">${p}</span>`).join(""):`<span class="pass">Independent</span>`}</div></div>
+      <div class="c-cond"><span class="lift ${r.os.cls}">${r.os.label}</span><br>${condChip}${r.rain?`<br><span class="rain">Rain at base</span>`:""}<div style="margin-top:5px">${confChip}</div></div>
       <div class="num fresh cell c-24" data-l="24h">${inch(r.h24)}</div>
       <div class="num fresh cell c-72" data-l="72h">${inch(r.h72)}</div>
-      <div class="num cell c-drive" data-l="Drive">${fmt(r.drive)}${chainCell(r)}<small>${CORRIDOR[r.corr].split(" ")[0]}${routesFailed?" · typical":""}</small></div>
+      <div class="num cell c-drive" data-l="Drive"><span class="dt">${fmt(r.drive)}</span> ${chainCell(r)}<small>${CORRIDOR[r.corr].split(" ")[0]}${routesFailed?" · typical":""}</small></div>
       <div class="num cell c-price" data-l="Ticket">${r.covered?`<span class="price onpass">Pass</span><small>($${r.price})</small>`:`$${r.price}<small>${r.ps==="listed"?"listed":"est."}</small>`}</div>
       <div class="c-score"><span class="num">${r.score?r.score.toFixed(1):"—"}</span><div class="meter"><i style="width:${(r.score/maxScore*100).toFixed(0)}%"></i></div></div>
       <span class="caret" aria-hidden="true">▸</span>
@@ -564,6 +609,7 @@ function render(){
         </div>
       </div>
       <div><h3>Trip</h3><dl>
+        <dt>Lifts</dt><dd>${r.os.label}${r.os.cls==="open"?" (Liftie, live)":""}</dd>
         <dt>Conditions</dt><dd>${condChip}</dd>
         <dt>Area</dt><dd>${r.area}</dd>
         <dt>Route</dt><dd>${CORRIDOR[r.corr]}</dd>
