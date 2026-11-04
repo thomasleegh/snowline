@@ -33,6 +33,8 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 5. **Wrap-up** lists what changed, what to tap on the phone, and what tests covered vs. what only the real phone can confirm.
 
 ## User decisions
+- 2026-11-03: Best bet = highest Worth it among resorts with lifts on the ski day (Fri 3 pm / Sat 5 am → coming Saturday; Weekday AM → next weekday): open now, operating (closed for the night), or opening day on/before the ski day. If none: "Nothing is expected to be open by <day>. Earliest: X".
+- 2026-11-03: long drives penalized in Worth it: ×1 up to 4 h, sliding to ×0.25 at 7 h+.
 - 2026-11-03: open resorts sort to the top, not-yet-open to the bottom ("Status unknown" between), under every sort; Best bet picks from the best group.
 
 ## User decisions (2026-11-01)
@@ -46,6 +48,7 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 - Phone list "jumbled": each row was its own grid with `auto` columns, so stats didn't line up. Phone cards now use fixed `repeat(4,1fr)` with grid areas.
 - Worth-it column unreachable on phone → sort bar (`#msort`, `#mdir`) under 760px.
 - Best-bet labels truncated ("DAY TIC…") → short labels.
+- Liftie lists every lift closed overnight → an operating resort showed "Closed now" at night. Outside 8:30–16:30 local it's "Open · closed for the night" (top group).
 - Drive time broke across lines ("3h / 52") next to a chain chip → `.dt` nowrap + a space before the chip so the chip wraps instead.
 
 ## Working style (user: Thomas)

@@ -64,6 +64,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 .msort select{flex:1}
 .msort button{font:500 13px/1 var(--body);padding:8px 10px;border-radius:5px;border:1px solid var(--line);background:transparent;white-space:nowrap}
 @media (max-width:760px){.msort{display:flex}}
+@media (max-width:560px){.best .tag{grid-column:1/-1;justify-self:start}}
 .board{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .key{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:12px 16px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
 .key .k{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0}
@@ -78,6 +79,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 .lift{display:inline-flex;align-items:center;gap:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 6px;border-radius:3px;white-space:nowrap;margin-bottom:4px}
 .lift.open{color:#fff;background:var(--good)}
 .lift.unk{color:var(--warn);border:1px solid currentColor}
+.lift.night{color:var(--good);border:1px solid currentColor}
 .lift.shut{color:var(--muted);border:1px solid var(--line)}
 .grp{padding:10px 16px 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--bg);border-top:1px solid var(--line)}
 .rain{display:inline-block;margin-top:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 5px;border-radius:3px;color:var(--snow);border:1px dashed var(--snow)}
@@ -212,6 +214,8 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
       <h2>Worth-it score</h2>
       <ol>
         <li>(24h × 2 + 72h × 2 + base ÷ 10) ÷ drive hours.</li>
+        <li>Long drives cost extra: full credit up to 4 h, sliding to 25% at 7 h or more.</li>
+        <li>Best bet only picks resorts with lifts running on your ski day (Saturday for Fri 3 pm / Sat 5 am, next weekday for Weekday AM): open now, or opening day on or before then.</li>
         <li>× 1.25 when a pass you hold covers the resort.</li>
         <li>Data caches for 30 minutes. Hit Refresh to pull new numbers.</li>
       </ol>
@@ -220,7 +224,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "11 · Nov 3";
+const BUILD = "12 · Nov 3";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
 // lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
 // opens: 2026-27 announced/projected opening day (SnowBrains/OnTheSnow, Oct 2026); liftie: liftie.info resort id for live lift status.
@@ -448,6 +452,26 @@ const ticketUrl = r => `https://${r.ticket || SITES[r.id]}`;
 // rank 0 = open, 1 = status unknown (past its opening date, no live data), 2 = not open
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const md = d => `${MON[+d.slice(5,7)-1]} ${+d.slice(8,10)}`;
+// The day you'd actually ski for the chosen departure: Fri 3 pm and Sat 5 am -> the coming Saturday;
+// Weekday AM -> the next weekday.
+function skiDay(){
+  const d = new Date(); d.setHours(12,0,0,0);
+  const dow = d.getDay(); // 0 Sun … 6 Sat
+  if(S.when === "mid"){ const add = dow===5 ? 3 : dow===6 ? 2 : 1; d.setDate(d.getDate()+add); }
+  else { d.setDate(d.getDate() + ((6 - dow + 7) % 7)); }
+  return d;
+}
+const dayLabel = d => `${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]} ${MON[d.getMonth()]} ${d.getDate()}`;
+// Will lifts be running on the ski day? yes = open now; likely = opening day on/before then; no = otherwise.
+function onSkiDay(r, os){
+  const day = ymdLocal(skiDay());
+  const od = LIVE.lifts?.[r.id]?.opening || r.opens;
+  if(os.cls === "open") return {ok:true, label:"Open now"};
+  if(os.cls === "night") return {ok:true, label:"Operating"};
+  if(os.cls === "shut" && os.label === "Closed now") return {ok:false};
+  if(od && od > day) return {ok:false, opens:od};
+  return {ok:true, label:"Scheduled to open"};
+}
 function openState(r){
   const today = ymdLocal(new Date());
   const lf = LIVE.lifts?.[r.id];
@@ -455,6 +479,9 @@ function openState(r){
     if(lf.open > 0) return {rank:0, cls:"open", label:`Open · ${lf.open}/${lf.total} lifts`};
     const od = lf.opening || r.opens;
     if(od && od > today) return {rank:2, cls:"shut", label:`Opens ${md(od)}`};
+    // Liftie lists every lift closed overnight; outside ~8:30–16:30 that just means "closed for the night".
+    const h = new Date().getHours() + new Date().getMinutes()/60;
+    if(h < 8.5 || h >= 16.5) return {rank:0, cls:"night", label:"Open · closed for the night"};
     return {rank:2, cls:"shut", label:"Closed now"};
   }
   if(r.opens && r.opens > today) return {rank:2, cls:"shut", label:`Opens ${md(r.opens)} (projected)`};
@@ -483,9 +510,12 @@ function calc(r){
   const h24 = sn?.h24 ?? null, h72 = sn?.h72 ?? null, baseIn = sn?.baseIn ?? null;
   const covered = r.passes.some(p=>S.owned.includes(p));
   const cond = sn==null ? null : ((h24>=6 || h72>=12) && baseIn>=24) ? "good" : (h72>=3 || baseIn>=30) ? "med" : "bad";
-  const score = (sn && drive) ? ((h24*2 + h72*2 + baseIn/10) / (drive/60)) * (covered?1.25:1) : 0;
+  const hrs = drive ? drive/60 : null;
+  const driveFactor = hrs==null ? 0 : hrs <= 4 ? 1 : hrs >= 7 ? 0.25 : 1 - (hrs-4)*0.25;
+  const score = (sn && drive) ? ((h24*2 + h72*2 + baseIn/10) / hrs) * (covered?1.25:1) * driveFactor : 0;
   const st = LIVE.stations?.[r.id] || null;
-  return {...r, os: openState(r), st, conf: confidence(sn, LIVE.stations ? st : undefined), rain: sn?.rainRisk||false, snowLvl: sn?.snowLvl||null, sn, drive, chain, h24, h72, baseIn, covered, cond, cost:covered?0:r.price, score};
+  const os = openState(r);
+  return {...r, os, wk: onSkiDay(r, os), st, conf: confidence(sn, LIVE.stations ? st : undefined), rain: sn?.rainRisk||false, snowLvl: sn?.snowLvl||null, sn, drive, chain, h24, h72, baseIn, covered, cond, cost:covered?0:r.price, score};
 }
 const fmt = m => m==null ? "—" : `${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}`;
 const inch = v => v==null ? "—" : `${v<10&&v%1? v.toFixed(1): Math.round(v)}"`;
@@ -558,12 +588,15 @@ function render(){
   const sign = S.dir==="asc"?1:-1;
   rows.sort((a,b)=>{ if(a.os.rank!==b.os.rank) return a.os.rank-b.os.rank; const x=key(a),y=key(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return (typeof x==="string" ? x.localeCompare(y) : x-y)*sign || a.name.localeCompare(b.name);});
 
-  const bestRank = Math.min(...rows.map(r=>r.os.rank));
-  const top = [...rows].filter(r=>r.os.rank===bestRank).sort((a,b)=>b.score-a.score)[0];
+  const sd = skiDay(), sdl = dayLabel(sd);
+  const eligible = rows.filter(r => r.wk.ok && r.score > 0);
+  const top = [...eligible].sort((a,b)=>b.score-a.score)[0];
+  const soonest = [...rows].filter(r=>!r.wk.ok && r.wk.opens).sort((a,b)=>a.wk.opens.localeCompare(b.wk.opens))[0];
+  const snowReady = rows.some(r => r.score > 0);
   const from = document.getElementById("origin").selectedOptions[0].text.split(" /")[0];
-  document.getElementById("best").innerHTML = top.score ? `
-    <span class="tag">${bestRank===0?"Best bet":"Best bet · nothing open yet"}</span>
-    <div class="name">${top.name} <span class="lift ${top.os.cls}">${top.os.label}</span><span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf&&top.conf.label==="Model only"?`<span class="conf low">Model only</span>`:""}${top.flag?`<span class="conf med">${top.flag}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
+  document.getElementById("best").innerHTML = top ? `
+    <span class="tag">Best bet · ${sdl}</span>
+    <div class="name">${top.name} <span class="lift ${top.wk.label==="Open now"?"open":top.wk.label==="Operating"?"night":"unk"}">${top.wk.label}</span><span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf&&top.conf.label==="Model only"?`<span class="conf low">Model only</span>`:""}${top.flag?`<span class="conf med">${top.flag}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
     <div class="stats">
       <div class="stat"><b class="fresh">${inch(top.h24)}</b><small>24h</small></div>
       <div class="stat"><b class="fresh">${inch(top.h72)}</b><small>72h</small></div>
@@ -571,6 +604,7 @@ function render(){
       <div class="stat">${top.covered?`<b class="onpass">On pass</b><small>${top.passes.filter(p=>S.owned.includes(p))[0]}</small>`:`<b>$${top.price}</b><small>Ticket</small>`}</div>
     </div>
     <div class="links" style="grid-column:1/-1;margin:0"><a href="${liftUrl(top)}" target="_blank" rel="noopener">Lifts open</a><a href="${camUrl(top)}" target="_blank" rel="noopener">Webcams</a><a href="${ticketUrl(top)}" target="_blank" rel="noopener">${top.covered?"Resort site":"Buy tickets"}</a></div>`
+    : snowReady ? `<span class="tag">Best bet · ${sdl}</span><div class="why">Nothing is expected to be open by ${sdl}.${soonest?` Earliest: <b>${soonest.name}</b>, ${md(soonest.wk.opens)}.`:""}</div>`
     : `<span class="tag">Best bet</span><div class="why">Waiting for snow and route data…</div>`;
 
   const chainCell = r => r.chain ? `<span class="chain R${r.chain}">R${r.chain}</span>` : "";

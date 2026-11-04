@@ -34,7 +34,7 @@ const LIFTIE = {
   heavenly:  {lifts:{stats:{open:0, hold:0, scheduled:0, closed:28}}},
   kirkwood:  {lifts:{stats:{open:0, hold:0, scheduled:0, closed:15}}, opening:'2026-12-04'},
 };
-function meteo(n){
+function meteo(n, mode){
   const hours = [], t0 = new Date(NOW - 7*864e5); t0.setUTCMinutes(0,0,0);
   for(let i=0;i<24*9;i++) hours.push(new Date(t0.getTime()+i*3600e3-8*3600e3).toISOString().slice(0,13)+':00');
   const days = [...new Set(hours.map(h=>h.slice(0,10)))];
@@ -42,7 +42,8 @@ function meteo(n){
     utc_offset_seconds:-28800,
     hourly_units:{snowfall:'inch',snow_depth:'ft',precipitation:'inch',freezing_level_height:'m'},
     daily_units:{snowfall_sum:'inch'},
-    hourly:{time:hours, snowfall:hours.map((_,k)=>k>140?0.05*(i%4):0), snow_depth:hours.map(()=>0.5+i*0.2),
+    // mode 'dump': 0.3"/h everywhere for the last ~36 h, Mammoth (index 16) 1"/h — a big far-away storm
+    hourly:{time:hours, snowfall:hours.map((_,k)=>mode==='dump' ? (k>140 ? (i===16?1:0.3) : 0) : (k>140?0.05*(i%4):0)), snow_depth:hours.map(()=>0.5+i*0.2),
       // resort 0 (Palisades) gets rain at the base: precip with a high freezing level
       precipitation:hours.map(()=>i===0?0.05:0), freezing_level_height:hours.map(()=>3000)},
     daily:{time:days, snowfall_sum:days.map((_,k)=>k>4?(i%4)*0.8:0)}
@@ -63,6 +64,7 @@ function stationData(){
 async function mockFeeds(page, mode='ok'){
   await page.route(BASE + 'proxy/liftie/**', route => {
     if(mode==='blocked') return route.abort('failed');
+    if(mode==='noliftie') return route.fulfill({status:404, body:''});
     const id = route.request().url().split('/proxy/liftie/')[1];
     return LIFTIE[id] ? route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(LIFTIE[id])}) : route.fulfill({status:404, body:''});
   });
@@ -72,7 +74,7 @@ async function mockFeeds(page, mode='ok'){
     if(mode==='blocked') return route.abort('failed');
     if(u.includes('open-meteo')){
       if(mode==='om400' && u.includes('freezing_level_height')) return J({error:true, reason:'invalid variable'}, 400);
-      return J(meteo(new URL(u).searchParams.get('latitude').split(',').length));
+      return J(meteo(new URL(u).searchParams.get('latitude').split(',').length, mode));
     }
     if(u.includes('/table/')){ const n = u.split('/table/v1/driving/')[1].split('?')[0].split(';').length; return J({code:'Ok', durations:[Array.from({length:n},(_,k)=>k?11000+k*300:0)]}); }
     if(u.includes('/route/')) return J({code:'Ok', routes:[{duration:24000}]});
@@ -86,14 +88,15 @@ async function mockFeeds(page, mode='ok'){
 
 const browser = await playwright.chromium.launch({ args: ['--no-sandbox'] });
 let failures = 0;
-async function test(name, fn, {mode='ok', width=390, height=844, dark=true}={}){
-  const ctx = await browser.newContext({ viewport:{width,height}, colorScheme: dark?'dark':'light', serviceWorkers:'block' });
+async function test(name, fn, {mode='ok', width=390, height=844, dark=true, now=NOW, setup}={}){
+  const ctx = await browser.newContext({ viewport:{width,height}, colorScheme: dark?'dark':'light', serviceWorkers:'block', timezoneId:'America/Los_Angeles' });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   try{
     await mockFeeds(page, mode);
-    await page.clock.setFixedTime(NOW);
+    await page.clock.setFixedTime(now);
+    if(setup) await page.addInitScript(setup);
     await page.goto(BASE + 'index.html');
     await page.waitForFunction(() => !document.querySelector('.feed.load'), null, {timeout:10000});
     await fn(page);
@@ -213,9 +216,34 @@ await test('open-first ordering holds under every sort and direction', async pag
     }
   }
 });
-await test('Best bet picks an open resort', async page => {
-  assert(/PALISADES|Palisades/.test(await page.textContent('.best .name')), 'best bet should be the open resort');
+await test('Best bet is labeled with the ski day and only picks resorts running then (2026-11-03)', async page => {
+  // clock: Mon Nov 30, departure Sat 5 am -> ski Sat Dec 5
+  assert(/Best bet · Sat Dec 5/.test(await page.textContent('.best .tag')), 'tag: ' + await page.textContent('.best .tag'));
+  const chip = await page.textContent('.best .lift');
+  assert(/Open now|Operating|Scheduled to open/.test(chip), 'best bet must have lifts on the ski day: ' + chip);
+  assert(!/Dodge Ridge|Heavenly/i.test(await page.textContent('.best .name')), 'Dodge (opens Dec 26) / Heavenly (closed now) are not eligible');
 });
+await test('Best bet says nothing is open yet, and when the first one opens', async page => {
+  // clock: Tue Nov 3, ski Sat Nov 7, no live lifts: nothing opens before Mammoth (Nov 13)
+  const t = await page.textContent('.best');
+  assert(/Nothing is expected to be open by Sat Nov 7/.test(t) && /Mammoth/.test(t) && /Nov 13/.test(t), t);
+}, {mode:'noliftie', now: Date.parse('2026-11-03T20:00:00Z')});
+await test('long drives are penalized: a 7 h storm loses to a closer one (2026-11-03)', async page => {
+  const worth = await page.$$eval('.row[data-id]', rs => Object.fromEntries(rs.map(r => [r.dataset.id, +((r.querySelector('.c-score .num')||{}).textContent||0)])));
+  const near = Math.max(...['nst','ros','bor','sug','chp','bvl'].map(id => worth[id]));
+  assert(worth.mam < near, `Mammoth (3x the snow, 7 h away) scored ${worth.mam}, best nearby ${near}`);
+  assert(!/Mammoth/i.test(await page.textContent('.best .name')), 'Mammoth should not be Best bet');
+}, {mode:'dump'});
+await test('weekday departure targets the next weekday', async page => {
+  await page.click('#when button:has-text("Weekday AM")');
+  assert(/Best bet · Tue Dec 1/.test(await page.textContent('.best .tag')), 'tag: ' + await page.textContent('.best .tag'));
+});
+await test('after hours, an operating resort is not shown as closed (Liftie lists lifts closed overnight)', async page => {
+  // 9 pm Pacific: Heavenly past opening, no lifts turning -> closed for the night, stays in Open now
+  assert(/Open · closed for the night/.test(await page.textContent('.row[data-id="hev"] .lift')), await page.textContent('.row[data-id="hev"] .lift'));
+  const ids = await page.$$eval('.row[data-id]', rs => rs.map(r => r.dataset.id));
+  assert(ids.indexOf('hev') < 2, 'Heavenly should be in the top (open) group, at ' + ids.indexOf('hev'));
+}, {now: Date.parse('2026-12-01T05:00:00Z')});
 await test('lift feed down: falls back to opening dates, says so', async page => {
   assert(/Lifts unavailable/.test(await page.textContent('#feeds')), 'status bar should say lifts unavailable');
   assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'still shows projected dates');
