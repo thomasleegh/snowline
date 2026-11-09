@@ -17,7 +17,7 @@ Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right
 | Rain at base | Open-Meteo freezing level − 300 m vs `baseElev`, next 24h with precip | yes | Rule of thumb. |
 | Measured snow depth (+ "Model only" flag when no station) | NRCS SNOTEL (`awdbRestApi/services/v1`), nearest station within 30 km | yes | Kirkwood, Bear Valley, Dodge Ridge, Mammoth usually have none → "Model only". CDEC stations would fill that gap. |
 | Drive time | OSRM public router × departure factor + chain delay | yes | Traffic factor is a guess. Mammoth routed via Minden (Tioga closed in winter). |
-| Open / closed + lift counts | Liftie (`liftie.info/api/resort/<id>`, open source) via `/proxy/liftie/*` (no CORS) for 14 resorts; `opens` = 2026-27 announced/projected opening day for all 19 | yes | Soda Springs, Bear Valley, Dodge Ridge, Badger Pass, Mt. Shasta aren't on Liftie → dates only. open+hold lifts count as open. |
+| Open / closed | `opens` = 2026-27 announced/projected opening day (all 19); past it = "Open (scheduled)" | no | Not live. Liftie was tried (Build 11–12) but returns HTTP 403 to requests via the Netlify proxy and has no CORS, so it was removed (2026-11-08). Live counts: the Lifts open link. |
 | Chain controls | Caltrans CWWP2 D3/D10 JSON | yes | Parser is defensive, format not fully verified. |
 | Ticket prices | hardcoded `price`; `ps:"listed"` = OnTheSnow weekday adult 2026-27, else estimate | no | Weekends cost more. |
 | Webcams / lift status / tickets | `cam` = OpenSnow slug: `/location/<slug>/cams` and `/snow-report` (lifts open in season + link to the resort's official terrain status); `ticket` deep link or `SITES` domain | — | Links out; cams can't be embedded reliably. |
@@ -33,9 +33,9 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 5. **Wrap-up** lists what changed, what to tap on the phone, and what tests covered vs. what only the real phone can confirm.
 
 ## User decisions
-- 2026-11-03: Best bet = highest Worth it among resorts with lifts on the ski day (Fri 3 pm / Sat 5 am → coming Saturday; Weekday AM → next weekday): open now, operating (closed for the night), or opening day on/before the ski day. If none: "Nothing is expected to be open by <day>. Earliest: X".
+- 2026-11-03: Best bet = highest Worth it among resorts open by the ski day (Fri 3 pm / Sat 5 am → coming Saturday; Weekday AM → next weekday), ties (e.g. no snow anywhere) → shortest drive. If none: "Nothing is expected to be open by <day>. Earliest: X".
 - 2026-11-03: long drives penalized in Worth it: ×1 up to 4 h, sliding to ×0.25 at 7 h+.
-- 2026-11-03: open resorts sort to the top, not-yet-open to the bottom ("Status unknown" between), under every sort; Best bet picks from the best group.
+- 2026-11-03: open resorts sort to the top, not-yet-open to the bottom, under every sort.
 
 ## User decisions (2026-11-01)
 - No High/Medium/Low confidence chips: a recommendation is assumed to be as good as its data. Only flag "Model only" (no station within 30 km) and unreliable openings (`flag`).
@@ -48,7 +48,7 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 - Phone list "jumbled": each row was its own grid with `auto` columns, so stats didn't line up. Phone cards now use fixed `repeat(4,1fr)` with grid areas.
 - Worth-it column unreachable on phone → sort bar (`#msort`, `#mdir`) under 760px.
 - Best-bet labels truncated ("DAY TIC…") → short labels.
-- Liftie lists every lift closed overnight → an operating resort showed "Closed now" at night. Outside 8:30–16:30 local it's "Open · closed for the night" (top group).
+- Best bet stuck on "Waiting for snow and route data…" when no resort had snow (all scores 0): readiness now = snow + route feeds answered, not score > 0.
 - Drive time broke across lines ("3h / 52") next to a chain chip → `.dt` nowrap + a space before the chip so the chip wraps instead.
 
 ## Working style (user: Thomas)

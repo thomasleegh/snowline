@@ -1,2 +1,1 @@
 /proxy/awdb/*  https://wcc.sc.egov.usda.gov/awdbRestApi/services/v1/:splat  200
-/proxy/liftie/*  https://liftie.info/api/resort/:splat  200

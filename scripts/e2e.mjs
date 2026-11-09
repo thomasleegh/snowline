@@ -28,12 +28,6 @@ const BASE = `http://localhost:${server.address().port}/`;
 // Nov 30, 2026: Mammoth/Heavenly/Northstar/Mt. Rose/Palisades/Bear Valley/Boreal/China Peak/Sugar Bowl past their
 // projected opening days; Kirkwood (Dec 4) and later not yet.
 const NOW = Date.parse('2026-11-30T20:00:00Z');
-// Liftie mock: Palisades open, Heavenly past opening but no lifts turning, Kirkwood not open yet; others 404.
-const LIFTIE = {
-  palisades: {lifts:{stats:{open:5, hold:1, scheduled:0, closed:6}}},
-  heavenly:  {lifts:{stats:{open:0, hold:0, scheduled:0, closed:28}}},
-  kirkwood:  {lifts:{stats:{open:0, hold:0, scheduled:0, closed:15}}, opening:'2026-12-04'},
-};
 function meteo(n, mode){
   const hours = [], t0 = new Date(NOW - 7*864e5); t0.setUTCMinutes(0,0,0);
   for(let i=0;i<24*9;i++) hours.push(new Date(t0.getTime()+i*3600e3-8*3600e3).toISOString().slice(0,13)+':00');
@@ -43,10 +37,10 @@ function meteo(n, mode){
     hourly_units:{snowfall:'inch',snow_depth:'ft',precipitation:'inch',freezing_level_height:'m'},
     daily_units:{snowfall_sum:'inch'},
     // mode 'dump': 0.3"/h everywhere for the last ~36 h, Mammoth (index 16) 1"/h — a big far-away storm
-    hourly:{time:hours, snowfall:hours.map((_,k)=>mode==='dump' ? (k>140 ? (i===16?1:0.3) : 0) : (k>140?0.05*(i%4):0)), snow_depth:hours.map(()=>0.5+i*0.2),
+    hourly:{time:hours, snowfall:hours.map((_,k)=>mode==='nosnow' ? 0 : mode==='dump' ? (k>140 ? (i===16?1:0.3) : 0) : (k>140?0.05*(i%4):0)), snow_depth:hours.map(()=>mode==='nosnow' ? 0 : 0.5+i*0.2),
       // resort 0 (Palisades) gets rain at the base: precip with a high freezing level
       precipitation:hours.map(()=>i===0?0.05:0), freezing_level_height:hours.map(()=>3000)},
-    daily:{time:days, snowfall_sum:days.map((_,k)=>k>4?(i%4)*0.8:0)}
+    daily:{time:days, snowfall_sum:days.map((_,k)=>mode==='nosnow' ? 0 : k>4?(i%4)*0.8:0)}
   }));
 }
 const STATIONS = [
@@ -62,12 +56,7 @@ function stationData(){
 
 // mode: 'ok' = every feed answers; 'blocked' = every outside request fails; 'om400' = Open-Meteo rejects the rain fields
 async function mockFeeds(page, mode='ok'){
-  await page.route(BASE + 'proxy/liftie/**', route => {
-    if(mode==='blocked') return route.abort('failed');
-    if(mode==='noliftie') return route.fulfill({status:404, body:''});
-    const id = route.request().url().split('/proxy/liftie/')[1];
-    return LIFTIE[id] ? route.fulfill({status:200, contentType:'application/json', body:JSON.stringify(LIFTIE[id])}) : route.fulfill({status:404, body:''});
-  });
+
   await page.route(u => !u.href.startsWith(BASE), async route => {
     const u = route.request().url();
     const J = (o, status=200) => route.fulfill({status, contentType:'application/json', headers:{'access-control-allow-origin':'*'}, body:JSON.stringify(o)});
@@ -114,7 +103,9 @@ const assert = (c, m) => { if(!c) throw new Error(m); };
 // ---------- feeds ----------
 await test('all feeds load and go green', async page => {
   const states = await page.$$eval('.feed', els => els.map(e => e.className));
-  assert(states.filter(c=>/\bok\b/.test(c)).length === 5, 'expected snow, routes, stations, lifts, chains all ok: ' + states.join(','));
+  assert(states.filter(c=>/\bok\b/.test(c)).length === 4, 'expected snow, routes, stations, chains all ok: ' + states.join(','));
+  assert(!/Liftie|Lifts unavailable/.test(await page.textContent('#feeds')), 'Liftie removed (403 via Netlify, 2026-11-08)');
+  assert(/Open \/ closed/.test(await page.textContent('#feeds')), 'status bar should say open/closed comes from opening dates');
 });
 await test('"No live data" banner stays hidden when feeds work (2026-11-01 bug)', async page => {
   assert(await page.isHidden('#blocked'), 'banner is visible even though feeds loaded');
@@ -189,45 +180,49 @@ await test('detail links: webcams (OpenSnow), buy tickets, resort site', async p
 });
 
 // ---------- open / closed ----------
-await test('open resorts first, unknown next, not-open-yet last (2026-11-03)', async page => {
-  const ranks = await page.$$eval('.row[data-id] .c-name .lift', els => els.map(e => e.classList.contains('open')?0:e.classList.contains('unk')?1:2));
-  assert(ranks.length === 19, 'every card needs a lift status chip, got ' + ranks.length);
-  assert(ranks.every((r,i) => i===0 || r >= ranks[i-1]), 'groups out of order: ' + ranks.join(''));
-  assert(await page.getAttribute('.row[data-id]', 'data-id') === 'pal', 'Palisades (only open resort) should be first');
-  assert(/Open · 6\/12 lifts/.test(await page.textContent('.row[data-id="pal"]')), 'Palisades should show 6/12 lifts (open + hold)');
+const OPEN = ['mam','nst','ros','hev','pal','sug','bor','bvl','chp']; // past their opening day on Nov 30
+await test('resorts past their opening day sort first, not-yet-open last', async page => {
+  const ids = await page.$$eval('.row[data-id]', rs => rs.map(r => r.dataset.id));
+  assert(ids.length === 19, 'expected 19 resorts');
+  assert(ids.slice(0, OPEN.length).sort().join() === [...OPEN].sort().join(), 'open group: ' + ids.slice(0, OPEN.length).join(','));
 });
-await test('closed and not-yet-open states are labeled correctly', async page => {
-  assert(/Closed now/.test(await page.textContent('.row[data-id="hev"] .lift')), 'Heavenly: past opening, no lifts -> Closed now');
-  assert(/Opens Dec 4/.test(await page.textContent('.row[data-id="kir"] .lift')), 'Kirkwood: Liftie opening date');
-  assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'Dodge Ridge: projected date, no Liftie');
-  assert(/No live lift data/.test(await page.textContent('.row[data-id="bvl"] .lift')), 'Bear Valley: past projected date, no Liftie -> unknown');
+await test('status labels come from opening dates', async page => {
+  assert(/Open \(scheduled\)/.test(await page.textContent('.row[data-id="pal"] .lift')), 'Palisades (Nov 25) should be open by schedule');
+  assert(/Opens Dec 4 \(projected\)/.test(await page.textContent('.row[data-id="kir"] .lift')), 'Kirkwood: Dec 4');
+  assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'Dodge Ridge: Dec 26');
 });
-await test('group headers separate open / unknown / not open', async page => {
+await test('group headers: open by schedule / not open yet', async page => {
   const g = await page.$$eval('.grp', els => els.map(e => e.textContent));
-  assert(g.join('|') === 'Open now|Status unknown|Not open yet', 'headers: ' + g.join('|'));
+  assert(g.join('|') === 'Open (by schedule)|Not open yet', 'headers: ' + g.join('|'));
 });
 await test('open-first ordering holds under every sort and direction', async page => {
   for(const k of ['price','drive','fresh','name','score']){
     await page.selectOption('#msort', k);
     for(let flip=0; flip<2; flip++){
       const first = await page.getAttribute('.row[data-id]', 'data-id');
-      assert(first === 'pal', `sort ${k}: open resort should stay on top, got ${first}`);
+      assert(OPEN.includes(first), `sort ${k}: an open resort should stay on top, got ${first}`);
       await page.click('#mdir');
     }
   }
 });
-await test('Best bet is labeled with the ski day and only picks resorts running then (2026-11-03)', async page => {
-  // clock: Mon Nov 30, departure Sat 5 am -> ski Sat Dec 5
+await test('Best bet is labeled with the ski day and only picks resorts open by then (2026-11-03)', async page => {
+  // clock: Mon Nov 30, departure Sat 5 am -> ski Sat Dec 5; Kirkwood (Dec 4) also eligible, Dodge (Dec 26) not
   assert(/Best bet · Sat Dec 5/.test(await page.textContent('.best .tag')), 'tag: ' + await page.textContent('.best .tag'));
-  const chip = await page.textContent('.best .lift');
-  assert(/Open now|Operating|Scheduled to open/.test(chip), 'best bet must have lifts on the ski day: ' + chip);
-  assert(!/Dodge Ridge|Heavenly/i.test(await page.textContent('.best .name')), 'Dodge (opens Dec 26) / Heavenly (closed now) are not eligible');
+  assert(/Open \(scheduled\)|Scheduled to open/.test(await page.textContent('.best .lift')), 'best bet chip: ' + await page.textContent('.best .lift'));
+  assert(!/Dodge Ridge|Sierra-at-Tahoe|Soda Springs/i.test(await page.textContent('.best .name')), 'resorts opening after Sat Dec 5 are not eligible');
 });
 await test('Best bet says nothing is open yet, and when the first one opens', async page => {
-  // clock: Tue Nov 3, ski Sat Nov 7, no live lifts: nothing opens before Mammoth (Nov 13)
+  // clock: Tue Nov 3, ski Sat Nov 7: nothing opens before Mammoth (Nov 13)
   const t = await page.textContent('.best');
   assert(/Nothing is expected to be open by Sat Nov 7/.test(t) && /Mammoth/.test(t) && /Nov 13/.test(t), t);
-}, {mode:'noliftie', now: Date.parse('2026-11-03T20:00:00Z')});
+}, {now: Date.parse('2026-11-03T20:00:00Z')});
+await test('Best bet still answers when no resort has any snow (2026-11-08 "never loads")', async page => {
+  // clock: Sun Nov 8, depart Fri 3 pm -> ski Sat Nov 14; only Mammoth (Nov 13) open by then; zero snow everywhere
+  await page.click('#when button:has-text("Fri 3 pm")');
+  const t = await page.textContent('.best');
+  assert(!/Waiting for snow/.test(t), 'stuck on Waiting: ' + t);
+  assert(/Best bet · Sat Nov 14/.test(t) && /Mammoth/.test(t), 'expected Mammoth for Sat Nov 14: ' + t);
+}, {mode:'nosnow', now: Date.parse('2026-11-09T07:50:00Z')});
 await test('long drives are penalized: a 7 h storm loses to a closer one (2026-11-03)', async page => {
   const worth = await page.$$eval('.row[data-id]', rs => Object.fromEntries(rs.map(r => [r.dataset.id, +((r.querySelector('.c-score .num')||{}).textContent||0)])));
   const near = Math.max(...['nst','ros','bor','sug','chp','bvl'].map(id => worth[id]));
@@ -238,14 +233,7 @@ await test('weekday departure targets the next weekday', async page => {
   await page.click('#when button:has-text("Weekday AM")');
   assert(/Best bet · Tue Dec 1/.test(await page.textContent('.best .tag')), 'tag: ' + await page.textContent('.best .tag'));
 });
-await test('after hours, an operating resort is not shown as closed (Liftie lists lifts closed overnight)', async page => {
-  // 9 pm Pacific: Heavenly past opening, no lifts turning -> closed for the night, stays in Open now
-  assert(/Open · closed for the night/.test(await page.textContent('.row[data-id="hev"] .lift')), await page.textContent('.row[data-id="hev"] .lift'));
-  const ids = await page.$$eval('.row[data-id]', rs => rs.map(r => r.dataset.id));
-  assert(ids.indexOf('hev') < 2, 'Heavenly should be in the top (open) group, at ' + ids.indexOf('hev'));
-}, {now: Date.parse('2026-12-01T05:00:00Z')});
-await test('lift feed down: falls back to opening dates, says so', async page => {
-  assert(/Lifts unavailable/.test(await page.textContent('#feeds')), 'status bar should say lifts unavailable');
+await test('feeds blocked: opening dates still work', async page => {
   assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'still shows projected dates');
 }, {mode:'blocked'});
 
@@ -256,8 +244,8 @@ await test('phone sort: price low to high, then flip', async page => {
   // no passes by default: cheapest day ticket first (Badger Pass $64, then Soda Springs $89)
   const order = await page.$$eval('.row[data-id]', rs => rs.map(r => r.dataset.id));
   // open resorts stay on top; within 'not open yet', cheapest first (Badger Pass $64, Soda Springs $89)
-  const notOpen = order.filter(id => !['pal','nst','ros','mam','bvl','bor','chp','sug','hev'].includes(id));
-  assert(order[0] === 'pal', 'open resort first, got ' + order[0]);
+  const notOpen = order.filter(id => !OPEN.includes(id));
+  assert(order[0] === 'chp', 'cheapest open resort (China Peak $119) first, got ' + order[0]);
   assert(notOpen[0] === 'bdg' && notOpen[1] === 'sod', 'cheapest not-open first, got ' + notOpen.slice(0,3).join(','));
   await page.click('#mdir');
   const top = await page.getAttribute('.row[data-id]', 'data-id');
