@@ -139,7 +139,7 @@ await test('confidence: only "Model only" is flagged, no High/Medium/Low chips (
   assert(!/Model only/.test(await page.textContent('.row[data-id="pal"]')), 'Palisades has a station, should not be flagged');
 });
 await test('measured station data shows in the detail', async page => {
-  await page.click('.row[data-id="pal"]');
+  await page.click('.row[data-id=\"pal\"] .rname');
   const d = await page.textContent('.detail');
   assert(/Squaw Valley G\.C\./.test(d) && /on the ground/.test(d), 'Palisades detail should show the measured station');
 });
@@ -171,7 +171,7 @@ await test('chain control from Caltrans shows on I-80 resorts', async page => {
   assert(/R2/.test(await page.textContent('.row[data-id="sug"] .c-drive')), 'Sugar Bowl (I-80) should show R2');
 });
 await test('detail links: webcams (OpenSnow), buy tickets, resort site', async page => {
-  await page.click('.row[data-id="hev"]');
+  await page.click('.row[data-id=\"hev\"] .rname');
   const hrefs = await page.$$eval('.detail .links a', as => as.map(a => a.href));
   assert(hrefs.some(h => h === 'https://opensnow.com/location/heavenly/cams'), 'webcam link: ' + hrefs.join(' '));
   assert(hrefs.some(h => h === 'https://opensnow.com/location/heavenly/snow-report'), 'lift status link: ' + hrefs.join(' '));
@@ -236,6 +236,50 @@ await test('weekday departure targets the next weekday', async page => {
 await test('feeds blocked: opening dates still work', async page => {
   assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'still shows projected dates');
 }, {mode:'blocked'});
+
+// ---------- directions ----------
+await test('tapping a drive time opens directions (Google + Apple Maps), not the card (2026-11-10)', async page => {
+  await page.click('.row[data-id="dod"] .c-drive');
+  assert(await page.isVisible('#sheet'), 'directions sheet should open');
+  assert(await page.getAttribute('.row[data-id="dod"]', 'aria-expanded') === 'false', 'card should not expand');
+  assert(/Directions to Dodge Ridge/.test(await page.textContent('#sheetTitle')), await page.textContent('#sheetTitle'));
+  const g = await page.getAttribute('#gmaps', 'href'), a = await page.getAttribute('#amaps', 'href');
+  assert(g === 'https://www.google.com/maps/dir/?api=1&origin=37.4419,-122.143&destination=38.188,-119.957&travelmode=driving', 'google: ' + g);
+  assert(a === 'https://maps.apple.com/?saddr=37.4419,-122.143&daddr=38.188,-119.957&dirflg=d', 'apple: ' + a);
+  assert(await page.getAttribute('#gmaps', 'target') === '_blank', 'opens outside the app');
+});
+await test('directions follow the Leaving from choice', async page => {
+  await page.selectOption('#origin', 'sf');
+  await page.click('.row[data-id="pal"] .c-drive');
+  assert((await page.getAttribute('#gmaps', 'href')).includes('origin=37.7749,-122.4194'), 'SF origin missing');
+  assert(/From San Francisco/.test(await page.textContent('#sheetSub')), await page.textContent('#sheetSub'));
+});
+await test('directions sheet closes with Cancel and by tapping outside; card tap still expands', async page => {
+  await page.click('.row[data-id="kir"] .c-drive');
+  await page.click('#sheetClose');
+  assert(await page.isHidden('#sheet'), 'Cancel should close');
+  await page.click('.row[data-id="kir"] .c-drive');
+  await page.mouse.click(195, 60);
+  assert(await page.isHidden('#sheet'), 'tapping outside should close');
+  await page.click('.row[data-id="kir"] .rname');
+  assert(await page.getAttribute('.row[data-id="kir"]', 'aria-expanded') === 'true', 'tapping the name still expands the card');
+});
+await test('Best bet drive tile and detail Directions link open the same sheet', async page => {
+  await page.click('.best .stat[data-route]');
+  assert(await page.isVisible('#sheet'), 'best bet tile should open directions');
+  await page.click('#sheetClose');
+  await page.click('.row[data-id="hev"] .rname');
+  await page.click('.detail a[data-route]');
+  assert(/Heavenly/.test(await page.textContent('#sheetTitle')), 'detail link should open Heavenly directions');
+});
+await test('phone: directions sheet fits, buttons are easy to tap', async page => {
+  await page.click('.row[data-id="sug"] .c-drive');
+  const m = await page.evaluate(() => ({w: document.querySelector('#sheet .panel').getBoundingClientRect().width,
+    hs: [...document.querySelectorAll('#sheet a, #sheet button')].map(e => e.getBoundingClientRect().height),
+    bottom: document.querySelector('#sheet .panel').getBoundingClientRect().bottom}));
+  assert(m.w <= 390 && m.bottom <= 844 + 1, 'sheet off screen: ' + JSON.stringify(m));
+  assert(m.hs.every(h => h >= 44), 'tap targets under 44px: ' + m.hs.join(','));
+});
 
 // ---------- sorting ----------
 await test('phone sort: price low to high, then flip', async page => {

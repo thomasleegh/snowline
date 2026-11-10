@@ -34,6 +34,7 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 
 ## User decisions
 - 2026-11-03: Best bet = highest Worth it among resorts open by the ski day (Fri 3 pm / Sat 5 am → coming Saturday; Weekday AM → next weekday), ties (e.g. no snow anywhere) → shortest drive. If none: "Nothing is expected to be open by <day>. Earliest: X".
+- 2026-11-10: tapping a drive time (card, Best bet tile, detail "Directions") opens a sheet with Google Maps / Apple Maps links, origin = Leaving from, destination = resort `road` point; the maps apps choose the route. Tapping the rest of the card still expands it.
 - 2026-11-03: long drives penalized in Worth it: ×1 up to 4 h, sliding to ×0.25 at 7 h+.
 - 2026-11-03: open resorts sort to the top, not-yet-open to the bottom, under every sort.
 

@@ -76,6 +76,17 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 .cond.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
 .price.onpass{color:var(--good)}
 .dt{white-space:nowrap}
+[data-route]{cursor:pointer}
+.c-drive .dt,.stat[data-route] b{text-decoration:underline dotted;text-decoration-color:var(--muted);text-underline-offset:4px}
+.go{font:500 10px/1 var(--mono);color:var(--snow);letter-spacing:.04em}
+#sheet{position:fixed;inset:0;z-index:20;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45)}
+#sheet .panel{width:100%;max-width:520px;background:var(--surface);border-radius:14px 14px 0 0;border:1px solid var(--line);border-bottom:0;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:10px}
+#sheet h3{margin:0;font:700 1.3rem/1.1 var(--display);text-transform:uppercase;letter-spacing:.03em}
+#sheet p{margin:0 0 4px;color:var(--muted);font-size:14px}
+#sheet a,#sheet button{-webkit-appearance:none;display:flex;align-items:center;justify-content:center;height:50px;border-radius:10px;font:600 16px/1 var(--body);text-decoration:none;border:1px solid var(--line)}
+#sheet a{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+#sheet button{background:transparent;color:var(--ink);margin-top:4px}
 .lift{display:inline-flex;align-items:center;gap:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 6px;border-radius:3px;white-space:nowrap;margin-bottom:4px}
 .lift.open{color:#fff;background:var(--good)}
 .lift.unk{color:var(--warn);border:1px solid currentColor}
@@ -183,6 +194,15 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
     
   </div>
 
+  <div id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="panel">
+      <h3 id="sheetTitle">Directions</h3>
+      <p id="sheetSub"></p>
+      <a id="gmaps" href="#" target="_blank" rel="noopener">Open in Google Maps</a>
+      <a id="amaps" href="#" target="_blank" rel="noopener">Open in Apple Maps</a>
+      <button type="button" id="sheetClose">Cancel</button>
+    </div>
+  </div>
   <div class="best" id="best"></div>
   <div class="msort"><label class="label" for="msort">Sort</label>
     <select id="msort"><option value="score">Worth it</option><option value="cond">Conditions</option><option value="h24">24h snow</option><option value="fresh">72h snow</option><option value="drive">Drive</option><option value="price">Price</option><option value="name">Name</option></select>
@@ -224,7 +244,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "13 · Nov 8";
+const BUILD = "14 · Nov 10";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
 // lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
 // opens: 2026-27 announced/projected opening day (SnowBrains/OnTheSnow, Oct 2026). No free live lift feed works from here
@@ -252,6 +272,26 @@ const RESORTS = [
   {id:"sha",opens:"2026-12-26",baseElev:1676,name:"Mt. Shasta Ski Park",area:"Far north · I-5",corr:"I5",passes:["Indy"],lat:41.316,lon:-122.203,elev:1900,road:[41.3197,-122.2032],price:99,ps:"listed",fb:300,cam:"mtshastaskipark",ticket:"onthesnow.com/california/mount-shasta-board-ski-park/lift-tickets"},
 ];
 const SITES = {hom:"skihomewood.com",dmp:"diamondpeak.com",bdg:"travelyosemite.com/winter/badger-pass-ski-area/",jun:"junemountain.com",pal:"palisadestahoe.com",nst:"northstarcalifornia.com",sug:"sugarbowl.com",bor:"rideboreal.com",kir:"kirkwood.com",sat:"sierraattahoe.com",hev:"skiheavenly.com",ros:"skirose.com",bvl:"bearvalley.com",dod:"dodgeridge.com",mam:"mammothmountain.com"};
+// Directions links: origin = chosen "Leaving from", destination = the resort's parking-lot point.
+// The maps apps pick the route themselves (live traffic, winter closures like Tioga).
+function routeLinks(r){
+  const o = ORIGINS[S.origin].join(","), d = r.road.join(",");
+  return {
+    google: `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=driving`,
+    apple: `https://maps.apple.com/?saddr=${o}&daddr=${d}&dirflg=d`,
+  };
+}
+function openRoute(id){
+  const r = RESORTS.find(x => x.id === id); if(!r) return;
+  const l = routeLinks(r);
+  document.getElementById("sheetTitle").textContent = `Directions to ${r.name}`;
+  document.getElementById("sheetSub").textContent = `From ${document.getElementById("origin").selectedOptions[0].text.split(" /")[0]} · about ${fmt(calc(r).drive)} (${WHEN.find(w=>w.id===S.when).label})`;
+  document.getElementById("gmaps").href = l.google;
+  document.getElementById("amaps").href = l.apple;
+  document.getElementById("sheet").hidden = false;
+  document.getElementById("gmaps").focus();
+}
+function closeRoute(){ document.getElementById("sheet").hidden = true; }
 const ORIGINS = {pa:[37.4419,-122.1430],sf:[37.7749,-122.4194],oak:[37.8044,-122.2712],sj:[37.3382,-121.8863]};
 const CORRIDOR = {I80:"I-80 over Donner",US50:"US-50 over Echo",SR88:"CA-88 over Carson",SR4:"CA-4 to Arnold",SR108:"CA-108 to Pinecrest",SR168:"CA-168 to Shaver Lake",SR41:"CA-41 into Yosemite",I5:"I-5 north to Mt. Shasta"};
 const CHAIN_MIN = {1:15,2:35,3:60};
@@ -573,7 +613,7 @@ function render(){
     <div class="stats">
       <div class="stat"><b class="fresh">${inch(top.h24)}</b><small>24h</small></div>
       <div class="stat"><b class="fresh">${inch(top.h72)}</b><small>72h</small></div>
-      <div class="stat"><b>${fmt(top.drive)}</b><small>${top.chain?`Drive R${top.chain}`:"Drive"}</small></div>
+      <div class="stat" data-route="${top.id}" role="button" tabindex="0" aria-label="Directions to ${top.name}"><b>${fmt(top.drive)}</b><small>${top.chain?`Drive R${top.chain}`:"Drive"} ›</small></div>
       <div class="stat">${top.covered?`<b class="onpass">On pass</b><small>${top.passes.filter(p=>S.owned.includes(p))[0]}</small>`:`<b>$${top.price}</b><small>Ticket</small>`}</div>
     </div>
     <div class="links" style="grid-column:1/-1;margin:0"><a href="${liftUrl(top)}" target="_blank" rel="noopener">Lifts open</a><a href="${camUrl(top)}" target="_blank" rel="noopener">Webcams</a><a href="${ticketUrl(top)}" target="_blank" rel="noopener">${top.covered?"Resort site":"Buy tickets"}</a></div>`
@@ -596,7 +636,7 @@ function render(){
       <div class="c-cond"><span class="lift ${r.os.cls}">${r.os.label}</span><br>${condChip}${r.rain?`<br><span class="rain">Rain at base</span>`:""}<div style="margin-top:5px">${confChip}</div></div>
       <div class="num fresh cell c-24" data-l="24h">${inch(r.h24)}</div>
       <div class="num fresh cell c-72" data-l="72h">${inch(r.h72)}</div>
-      <div class="num cell c-drive" data-l="Drive"><span class="dt">${fmt(r.drive)}</span> ${chainCell(r)}<small>${CORRIDOR[r.corr].split(" ")[0]}${routesFailed?" · typical":""}</small></div>
+      <div class="num cell c-drive" data-l="Drive" data-route="${r.id}" aria-label="Directions to ${r.name}"><span class="dt">${fmt(r.drive)}</span> ${chainCell(r)}<small>${CORRIDOR[r.corr].split(" ")[0]}${routesFailed?" · typical":""}</small><span class="go">Route ›</span></div>
       <div class="num cell c-price" data-l="Ticket">${r.covered?`<span class="price onpass">Pass</span><small>($${r.price})</small>`:`$${r.price}<small>${r.ps==="listed"?"listed":"est."}</small>`}</div>
       <div class="c-score"><span class="num">${r.score?r.score.toFixed(1):"—"}</span><div class="meter"><i style="width:${(r.score/maxScore*100).toFixed(0)}%"></i></div></div>
       <span class="caret" aria-hidden="true">▸</span>
@@ -621,7 +661,7 @@ function render(){
         <dt>Area</dt><dd>${r.area}</dd>
         <dt>Route</dt><dd>${CORRIDOR[r.corr]}</dd>
         <dt>Chains</dt><dd>${LIVE.chains==null?"Feed unavailable":r.chain?`R${r.chain} · +${CHAIN_MIN[r.chain]} min`:LIVE.chains[r.corr]===0?"No controls":"No report for this road"}</dd>
-        <dt>Drive</dt><dd>${fmt(r.drive)} (${WHEN.find(w=>w.id===S.when).label})</dd>
+        <dt>Drive</dt><dd>${fmt(r.drive)} (${WHEN.find(w=>w.id===S.when).label}) · <a href="#" data-route="${r.id}" style="color:var(--snow)">Directions</a></dd>
         <dt>Base</dt><dd>${r.baseIn!=null?`${r.baseIn}" modeled`:"—"} · lodge ${Math.round(r.baseElev*3.281/100)*100} ft</dd>
         <dt>Snow level</dt><dd>${r.snowLvl?`${r.snowLvl[0].toLocaleString()}–${r.snowLvl[1].toLocaleString()} ft next 24h${r.rain?" · rain likely at base":""}`:"—"}</dd>
         <dt>Ticket</dt><dd>${r.covered?`On your pass ($${r.price} without it)`:`$${r.price} ${r.ps==="listed"?"listed adult weekday price":"estimate"}; often cheaper bought online ahead`}</dd>
@@ -634,6 +674,18 @@ document.getElementById("origin").onchange = e=>{S.origin=e.target.value; store.
   run("drive","drive_"+S.origin,()=>loadDrive(S.origin),v=>LIVE.drive[S.origin]=v);};
 document.getElementById("msort").onchange = e=>{S.sort=e.target.value; store.set("xsort",S.sort); render();};
 document.getElementById("mdir").onclick = ()=>{S.dir = S.dir==="asc"?"desc":"asc"; store.set("xdir",S.dir); render();};
+// Drive time anywhere (card, Best bet tile, detail) opens the directions sheet instead of expanding the card.
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-route]");
+  if(t){ e.preventDefault(); e.stopPropagation(); openRoute(t.dataset.route); }
+}, true);
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape") closeRoute();
+  const t = e.target.closest?.("[data-route]");
+  if(t && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); openRoute(t.dataset.route); }
+});
+document.getElementById("sheet").addEventListener("click", e => { if(e.target.id === "sheet" || e.target.id === "sheetClose") closeRoute(); });
+["gmaps","amaps"].forEach(id => document.getElementById(id).addEventListener("click", () => setTimeout(closeRoute, 300)));
 document.getElementById("board").onclick = e=>{
   const th=e.target.closest(".th");
   if(th){ const k=th.dataset.k; S.dir = S.sort===k ? (S.dir==="asc"?"desc":"asc") : "asc"; S.sort=k; store.set("xsort",S.sort); store.set("xdir",S.dir); render(); return; }
