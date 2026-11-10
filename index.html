@@ -244,7 +244,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "14 · Nov 10";
+const BUILD = "15 · Nov 10";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
 // lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
 // opens: 2026-27 announced/projected opening day (SnowBrains/OnTheSnow, Oct 2026). No free live lift feed works from here
@@ -272,20 +272,27 @@ const RESORTS = [
   {id:"sha",opens:"2026-12-26",baseElev:1676,name:"Mt. Shasta Ski Park",area:"Far north · I-5",corr:"I5",passes:["Indy"],lat:41.316,lon:-122.203,elev:1900,road:[41.3197,-122.2032],price:99,ps:"listed",fb:300,cam:"mtshastaskipark",ticket:"onthesnow.com/california/mount-shasta-board-ski-park/lift-tickets"},
 ];
 const SITES = {hom:"skihomewood.com",dmp:"diamondpeak.com",bdg:"travelyosemite.com/winter/badger-pass-ski-area/",jun:"junemountain.com",pal:"palisadestahoe.com",nst:"northstarcalifornia.com",sug:"sugarbowl.com",bor:"rideboreal.com",kir:"kirkwood.com",sat:"sierraattahoe.com",hev:"skiheavenly.com",ros:"skirose.com",bvl:"bearvalley.com",dod:"dodgeridge.com",mam:"mammothmountain.com"};
-// Directions links: origin = chosen "Leaving from", destination = the resort's parking-lot point.
-// The maps apps pick the route themselves (live traffic, winter closures like Tioga).
+// Directions: start = the phone's current location (maps apps default when no origin is given),
+// end = the resort searched by name, so Maps routes to its real lot instead of an off-road coordinate.
+const DEST = {pal:"Palisades Tahoe, Olympic Valley, CA",nst:"Northstar California Resort, Truckee, CA",sug:"Sugar Bowl Resort, Norden, CA",
+  bor:"Boreal Mountain Resort, Soda Springs, CA",sod:"Soda Springs Mountain Resort, Soda Springs, CA",dsr:"Donner Ski Ranch, Norden, CA",
+  hom:"Homewood Mountain Resort, Homewood, CA",dmp:"Diamond Peak Ski Resort, Incline Village, NV",ros:"Mt. Rose Ski Tahoe, Reno, NV",
+  kir:"Kirkwood Mountain Resort, Kirkwood, CA",sat:"Sierra-at-Tahoe, Twin Bridges, CA",hev:"Heavenly Mountain Resort, South Lake Tahoe, CA",
+  bvl:"Bear Valley Mountain Resort, Bear Valley, CA",dod:"Dodge Ridge Mountain Resort, Pinecrest, CA",bdg:"Badger Pass Ski Area, Yosemite National Park, CA",
+  chp:"China Peak Mountain Resort, Lakeshore, CA",mam:"Mammoth Mountain Main Lodge, Mammoth Lakes, CA",jun:"June Mountain Ski Area, June Lake, CA",
+  sha:"Mt. Shasta Ski Park, McCloud, CA"};
 function routeLinks(r){
-  const o = ORIGINS[S.origin].join(","), d = r.road.join(",");
+  const d = encodeURIComponent(DEST[r.id] || r.name);
   return {
-    google: `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=driving`,
-    apple: `https://maps.apple.com/?saddr=${o}&daddr=${d}&dirflg=d`,
+    google: `https://www.google.com/maps/dir/?api=1&destination=${d}&travelmode=driving`,
+    apple: `https://maps.apple.com/?daddr=${d}&dirflg=d`,
   };
 }
 function openRoute(id){
   const r = RESORTS.find(x => x.id === id); if(!r) return;
   const l = routeLinks(r);
   document.getElementById("sheetTitle").textContent = `Directions to ${r.name}`;
-  document.getElementById("sheetSub").textContent = `From ${document.getElementById("origin").selectedOptions[0].text.split(" /")[0]} · about ${fmt(calc(r).drive)} (${WHEN.find(w=>w.id===S.when).label})`;
+  document.getElementById("sheetSub").textContent = `From your current location, with live traffic. Snowline\u2019s estimate: ${fmt(calc(r).drive)} from ${document.getElementById("origin").selectedOptions[0].text.split(" /")[0]} (${WHEN.find(w=>w.id===S.when).label} traffic).`;
   document.getElementById("gmaps").href = l.google;
   document.getElementById("amaps").href = l.apple;
   document.getElementById("sheet").hidden = false;

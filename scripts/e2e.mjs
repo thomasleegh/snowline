@@ -244,15 +244,19 @@ await test('tapping a drive time opens directions (Google + Apple Maps), not the
   assert(await page.getAttribute('.row[data-id="dod"]', 'aria-expanded') === 'false', 'card should not expand');
   assert(/Directions to Dodge Ridge/.test(await page.textContent('#sheetTitle')), await page.textContent('#sheetTitle'));
   const g = await page.getAttribute('#gmaps', 'href'), a = await page.getAttribute('#amaps', 'href');
-  assert(g === 'https://www.google.com/maps/dir/?api=1&origin=37.4419,-122.143&destination=38.188,-119.957&travelmode=driving', 'google: ' + g);
-  assert(a === 'https://maps.apple.com/?saddr=37.4419,-122.143&daddr=38.188,-119.957&dirflg=d', 'apple: ' + a);
+  assert(g === 'https://www.google.com/maps/dir/?api=1&destination=Dodge%20Ridge%20Mountain%20Resort%2C%20Pinecrest%2C%20CA&travelmode=driving', 'google: ' + g);
+  assert(a === 'https://maps.apple.com/?daddr=Dodge%20Ridge%20Mountain%20Resort%2C%20Pinecrest%2C%20CA&dirflg=d', 'apple: ' + a);
+  // no origin: Maps starts from the phone's location, not a snapped street address (2026-11-10 '668 Coleridge Ave')
+  assert(!/origin=|saddr=/.test(g + a), 'links must not pin an origin');
   assert(await page.getAttribute('#gmaps', 'target') === '_blank', 'opens outside the app');
 });
-await test('directions follow the Leaving from choice', async page => {
+await test('directions: every resort routes to a named place; sheet explains the estimate', async page => {
+  const missing = await page.evaluate(() => RESORTS.filter(r => !DEST[r.id]).map(r => r.id));
+  assert(!missing.length, 'no named destination for: ' + missing.join(','));
   await page.selectOption('#origin', 'sf');
   await page.click('.row[data-id="pal"] .c-drive');
-  assert((await page.getAttribute('#gmaps', 'href')).includes('origin=37.7749,-122.4194'), 'SF origin missing');
-  assert(/From San Francisco/.test(await page.textContent('#sheetSub')), await page.textContent('#sheetSub'));
+  const sub = await page.textContent('#sheetSub');
+  assert(/current location/.test(sub) && /from San Francisco/.test(sub) && /traffic/.test(sub), sub);
 });
 await test('directions sheet closes with Cancel and by tapping outside; card tap still expands', async page => {
   await page.click('.row[data-id="kir"] .c-drive');
