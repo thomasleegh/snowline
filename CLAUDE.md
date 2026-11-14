@@ -8,7 +8,7 @@ Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right
 - `_redirects`: `/proxy/awdb/*` → NRCS SNOTEL API, so station data is fetched server-side by Netlify (no CORS). The app falls back to calling the API directly when the proxy isn't there (local file, other hosts).
 - `netlify.toml`: publish dir = repo root; `sw.js` and `index.html` served no-cache.
 - `scripts/e2e.mjs`: browser regression suite (Playwright, 390×844, all feeds mocked, clock fixed at 2026-11-30 so open/closed results don't drift).
-- Deploy: Netlify, auto-deploy on push to `main`. Same URL = same localStorage (passes, origin, sort survive).
+- Deploy: Netlify site **https://steady-kringle-e64fbc.netlify.app** (linked to this repo), auto-deploy on push to `main`. An older Netlify Drop site from the zip days does not update; the phone should use the steady-kringle one. Same URL = same localStorage (passes, origin, sort survive).
 
 ## Data sources
 | What | Source | Live? | Notes |
