@@ -249,7 +249,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "16 · Nov 13";
+const BUILD = "17 · Nov 13";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
 // lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
 // opens: 2026-27 announced/projected opening day (SnowBrains/OnTheSnow, Oct 2026). No free live lift feed works from here
@@ -596,8 +596,15 @@ function renderFeeds(){
     `<span class="feed est"><i></i>Open / closed <small>opening dates · tap Lifts open for live</small></span>` +
     f("chains","Chains","Caltrans",`blocked by browser · <a href="https://quickmap.dot.ca.gov/" target="_blank" rel="noopener">check QuickMap</a>`) +
     `<span class="feed est"><i></i>Prices <small>estimates</small></span>` +
-    `<button type="button" id="refresh">Refresh</button>` + `<span class="feed" style="flex-basis:100%"><small>Build ${BUILD}</small></span>`;
+    `<button type="button" id="refresh">Refresh</button>` + `<span class="feed" style="flex-basis:100%;flex-wrap:wrap;gap:8px"><small>Build ${BUILD}</small>${location.protocol==="https:"?`<small id="siteUrl" style="user-select:all;-webkit-user-select:all">${location.origin.replace("https://","")}</small><button type="button" id="copyLink" style="font:500 12px/1 var(--body);padding:6px 8px;border-radius:5px;border:1px solid var(--line);background:transparent;color:var(--ink)">Copy link</button>`:""}</span>`;
   document.getElementById("refresh").onclick = ()=>loadAll(true);
+  const cl = document.getElementById("copyLink");
+  if(cl) cl.onclick = () => {
+    const done = t => { cl.textContent = t; setTimeout(()=>{ if(cl.isConnected) cl.textContent = "Copy link"; }, 1800); };
+    (navigator.clipboard ? navigator.clipboard.writeText(location.origin + "/") : Promise.reject())
+      .then(() => done("Copied"))
+      .catch(() => { const r = document.createRange(); r.selectNodeContents(document.getElementById("siteUrl")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); done("Selected, tap Copy"); });
+  };
 }
 function bars(sn){
   // past 7 days (solid) + forecast days up to the ski day (outlined)

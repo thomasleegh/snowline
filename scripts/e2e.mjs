@@ -242,6 +242,24 @@ await test('feeds blocked: opening dates still work', async page => {
   assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'still shows projected dates');
 }, {mode:'blocked'});
 
+// ---------- site link ----------
+await test('status bar shows the site address with Copy link on https (2026-11-13)', async page => {
+  assert(!(await page.$('#copyLink')), 'no copy button on a non-https page (local file / preview)');
+  const HOST = 'https://snowline-test.netlify.app/';
+  await page.route(HOST + '**', route => {
+    const f = path.join(ROOT, new URL(route.request().url()).pathname.replace(/^\/$/, '/index.html'));
+    return fs.existsSync(f) && fs.statSync(f).isFile() ? route.fulfill({path: f}) : route.fulfill({status:404, body:''});
+  });
+  await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin: HOST.slice(0,-1)});
+  await page.goto(HOST);
+  await page.waitForSelector('#copyLink');
+  assert(/snowline-test\.netlify\.app/.test(await page.textContent('#siteUrl')), 'address shown: ' + await page.textContent('#siteUrl'));
+  await page.click('#copyLink');
+  assert(/Copied|Selected/.test(await page.textContent('#copyLink')), 'button feedback: ' + await page.textContent('#copyLink'));
+  const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''));
+  assert(clip === '' || clip === HOST, 'clipboard: ' + clip);
+});
+
 // ---------- forecast / Windy ----------
 await test('ski-day forecast: snow due before Sat shows on the card and wins Best bet (2026-11-13)', async page => {
   // Kirkwood: nothing fallen yet, ~29" forecast Thu–Fri, opens Fri Dec 4 -> best bet for Sat Dec 5
