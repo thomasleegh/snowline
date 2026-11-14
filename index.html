@@ -91,6 +91,9 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 .lift.open{color:#fff;background:var(--good)}
 .lift.unk{color:var(--warn);border:1px solid currentColor}
 .lift.sched{color:var(--good);border:1px solid currentColor}
+.fcx{display:inline-flex;align-items:center;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 6px;border-radius:3px;white-space:nowrap;color:var(--snow);background:var(--snow-soft)}
+.wind{display:inline-flex;align-items:center;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 6px;border-radius:3px;white-space:nowrap;color:var(--warn);border:1px solid currentColor}
+.wind.hold{color:var(--bad)}
 .lift.shut{color:var(--muted);border:1px solid var(--line)}
 .grp{padding:10px 16px 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--bg);border-top:1px solid var(--line)}
 .rain{display:inline-block;margin-top:5px;font:600 10px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:4px 5px;border-radius:3px;color:var(--snow);border:1px dashed var(--snow)}
@@ -205,7 +208,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
   </div>
   <div class="best" id="best"></div>
   <div class="msort"><label class="label" for="msort">Sort</label>
-    <select id="msort"><option value="score">Worth it</option><option value="cond">Conditions</option><option value="h24">24h snow</option><option value="fresh">72h snow</option><option value="drive">Drive</option><option value="price">Price</option><option value="name">Name</option></select>
+    <select id="msort"><option value="score">Worth it</option><option value="cond">Conditions</option><option value="h24">24h snow</option><option value="fresh">72h snow</option><option value="fc">Snow by ski day</option><option value="drive">Drive</option><option value="price">Price</option><option value="name">Name</option></select>
     <button type="button" id="mdir"></button></div>
   <div class="board" id="board"></div>
 
@@ -234,6 +237,8 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
       <h2>Worth-it score</h2>
       <ol>
         <li>(24h × 2 + 72h × 2 + base ÷ 10) ÷ drive hours.</li>
+        <li>Snow forecast to fall before 9 am on your ski day counts like fresh snow (× 2).</li>
+        <li>Wind: ski-day gusts (8 am–4 pm, mid-mountain) of 35+ mph × 0.85, 45+ mph × 0.6, since upper lifts often stop.</li>
         <li>Long drives cost extra: full credit up to 4 h, sliding to 25% at 7 h or more.</li>
         <li>Best bet only picks resorts with lifts running on your ski day (Saturday for Fri 3 pm / Sat 5 am, next weekday for Weekday AM): open now, or opening day on or before then.</li>
         <li>× 1.25 when a pass you hold covers the resort.</li>
@@ -244,7 +249,7 @@ svg text{fill:var(--muted);font:500 10px var(--mono)}
 </div>
 
 <script>
-const BUILD = "15 · Nov 10";
+const BUILD = "16 · Nov 13";
 const PASSES = ["Ikon","Epic","Mountain Collective","Indy","Cali Pass"];
 // lat/lon near mid-mountain; elev (m) for the snow model; baseElev (m) = base lodge; road = parking-lot point for routing
 // opens: 2026-27 announced/projected opening day (SnowBrains/OnTheSnow, Oct 2026). No free live lift feed works from here
@@ -330,13 +335,13 @@ async function loadSnow(){
   const q = new URLSearchParams({
     latitude:RESORTS.map(r=>r.lat).join(","), longitude:RESORTS.map(r=>r.lon).join(","),
     elevation:RESORTS.map(r=>r.elev).join(","),
-    hourly:"snowfall,snow_depth,precipitation,freezing_level_height", daily:"snowfall_sum",
-    past_days:"6", forecast_days:"2", precipitation_unit:"inch", timezone:"America/Los_Angeles"});
+    hourly:"snowfall,snow_depth,precipitation,freezing_level_height,wind_gusts_10m,temperature_2m", daily:"snowfall_sum",
+    past_days:"6", forecast_days:"8", precipitation_unit:"inch", wind_speed_unit:"mph", temperature_unit:"fahrenheit", timezone:"America/Los_Angeles"});
   let data;
   try{ data = await getJSON("https://api.open-meteo.com/v1/forecast?"+q); }
   catch(e){
     if(/^blocked|timed out/.test(e.message)) throw e;      // network problem: retrying won't help
-    q.set("hourly","snowfall,snow_depth");                  // API rejected a variable: drop the rain-risk ones
+    q.set("hourly","snowfall,snow_depth");                  // API rejected a variable: drop the rain/wind/temp ones
     data = await getJSON("https://api.open-meteo.com/v1/forecast?"+q);
   }
   if(!Array.isArray(data)) data=[data];
@@ -362,7 +367,14 @@ async function loadSnow(){
       if(toIn(d.hourly.precipitation?.[k],pu) >= 0.02 && sl > r.baseElev) rainHrs.push(k);
     }
     const ft = m => Math.max(0, Math.round(m*3.281/100)*100);
-    out[r.id] = {h24:+sum(24).toFixed(1), h72:+sum(72).toFixed(1), snow7, days, baseIn:Math.round(toIn(depth,su)),
+    // Forecast from the next hour on (times are resort-local "YYYY-MM-DDTHH:00"), used for the ski day.
+    const fc = {t:[], s:[], g:[], T:[]};
+    for(let k=idx+1;k<d.hourly.time.length;k++){
+      fc.t.push(d.hourly.time[k].slice(0,13)); fc.s.push(+toIn(d.hourly.snowfall[k],hu).toFixed(2));
+      fc.g.push(d.hourly.wind_gusts_10m?.[k] ?? null); fc.T.push(d.hourly.temperature_2m?.[k] ?? null);
+    }
+    const fdays = d.daily.time.slice(di+1), fsnow = d.daily.snowfall_sum.slice(di+1).map(v=>+toIn(v,du).toFixed(1));
+    out[r.id] = {h24:+sum(24).toFixed(1), h72:+sum(72).toFixed(1), snow7, days, fdays, fsnow, fc, baseIn:Math.round(toIn(depth,su)),
       snowLvl: lvls.length ? [ft(Math.min(...lvls)), ft(Math.max(...lvls))] : null, rainRisk: rainHrs.length>0};
   });
   return out;
@@ -478,6 +490,8 @@ function loadAll(force){
 // ---------- Model ----------
 const camUrl = r => `https://opensnow.com/location/${r.cam}/cams`;
 // OpenSnow snow report: lifts open in season + "Terrain Status" link to the resort's official lift page
+// Windy: point forecast for the resort with the snow overlay (coords need a decimal part)
+const windyUrl = r => { const a = r.lat.toFixed(3), o = r.lon.toFixed(3); return `https://www.windy.com/${a}/${o}?snow,${a},${o},10`; };
 const liftUrl = r => `https://opensnow.com/location/${r.cam}/snow-report`;
 const ticketUrl = r => `https://${r.ticket || SITES[r.id]}`;
 // rank 0 = open, 1 = status unknown (past its opening date, no live data), 2 = not open
@@ -506,6 +520,29 @@ function openState(r){
   return {rank:0, cls:"sched", label:"Open (scheduled)"};
 }
 const ymdLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+// Ski-day forecast: snow expected from now until 9 am on the ski day, and gusts/temps 8 am–4 pm that day.
+function skiForecast(sn){
+  if(!sn?.fc?.t?.length) return null;
+  const day = ymdLocal(skiDay()), cut = day + "T09";
+  if(sn.fc.t[sn.fc.t.length-1] < cut) return null;                  // ski day beyond the forecast
+  let snow = 0, gust = null, lo = null, hi = null;
+  sn.fc.t.forEach((t,k) => {
+    if(t <= cut) snow += sn.fc.s[k] || 0;
+    if(t.slice(0,10) === day){ const h = +t.slice(11,13); if(h >= 8 && h <= 16){
+      if(sn.fc.g[k] != null) gust = Math.max(gust ?? 0, sn.fc.g[k]);
+      if(sn.fc.T[k] != null){ lo = Math.min(lo ?? 999, sn.fc.T[k]); hi = Math.max(hi ?? -999, sn.fc.T[k]); } } }
+  });
+  return {snow:+snow.toFixed(1), gust: gust==null?null:Math.round(gust), lo: lo==null?null:Math.round(lo), hi: hi==null?null:Math.round(hi)};
+}
+const WIND_HOLD = 45, WIND_WARN = 35; // mph gusts at mid-mountain: upper lifts often go on hold above ~45
+const dowS = () => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][skiDay().getDay()];
+function fxChips(r){
+  if(!r.fx) return "";
+  const sn = r.fx.snow >= 1 ? `<span class="fcx">+${Math.round(r.fx.snow)}" by ${dowS()}</span>` : "";
+  const w = r.fx.gust >= WIND_HOLD ? `<span class="wind hold">${dowS()} gusts ${r.fx.gust} mph · lift holds likely</span>`
+          : r.fx.gust >= WIND_WARN ? `<span class="wind">${dowS()} gusts ${r.fx.gust} mph</span>` : "";
+  return sn + w;
+}
 function confidence(sn, st){
   if(!sn) return null;
   if(!st || st.depth==null) return {lvl:"low", label:"Model only", short:"Model only", why:"No SNOTEL station within 30 km reports snow depth, so nothing measured backs up the model here. Check the resort's own report."};
@@ -530,10 +567,12 @@ function calc(r){
   const cond = sn==null ? null : ((h24>=6 || h72>=12) && baseIn>=24) ? "good" : (h72>=3 || baseIn>=30) ? "med" : "bad";
   const hrs = drive ? drive/60 : null;
   const driveFactor = hrs==null ? 0 : hrs <= 4 ? 1 : hrs >= 7 ? 0.25 : 1 - (hrs-4)*0.25;
-  const score = (sn && drive) ? ((h24*2 + h72*2 + baseIn/10) / hrs) * (covered?1.25:1) * driveFactor : 0;
+  const fx = skiForecast(sn);
+  const windFactor = fx?.gust == null ? 1 : fx.gust >= WIND_HOLD ? 0.6 : fx.gust >= WIND_WARN ? 0.85 : 1;
+  const score = (sn && drive) ? ((h24*2 + h72*2 + (fx?.snow||0)*2 + baseIn/10) / hrs) * (covered?1.25:1) * driveFactor * windFactor : 0;
   const st = LIVE.stations?.[r.id] || null;
   const os = openState(r);
-  return {...r, os, wk: onSkiDay(r, os), st, conf: confidence(sn, LIVE.stations ? st : undefined), rain: sn?.rainRisk||false, snowLvl: sn?.snowLvl||null, sn, drive, chain, h24, h72, baseIn, covered, cond, cost:covered?0:r.price, score};
+  return {...r, fx, os, wk: onSkiDay(r, os), st, conf: confidence(sn, LIVE.stations ? st : undefined), rain: sn?.rainRisk||false, snowLvl: sn?.snowLvl||null, sn, drive, chain, h24, h72, baseIn, covered, cond, cost:covered?0:r.price, score};
 }
 const fmt = m => m==null ? "—" : `${Math.floor(m/60)}h ${String(m%60).padStart(2,"0")}`;
 const inch = v => v==null ? "—" : `${v<10&&v%1? v.toFixed(1): Math.round(v)}"`;
@@ -561,12 +600,17 @@ function renderFeeds(){
   document.getElementById("refresh").onclick = ()=>loadAll(true);
 }
 function bars(sn){
-  const snow=sn.snow7, W=300,H=110,pad=22,max=Math.max(6,...snow), bw=(W-pad)/snow.length;
+  // past 7 days (solid) + forecast days up to the ski day (outlined)
+  const sd = ymdLocal(skiDay());
+  const fdays = (sn.fdays||[]).filter(d => d <= sd), fsnow = (sn.fsnow||[]).slice(0, fdays.length);
+  const vals = [...sn.snow7, ...fsnow], days = [...sn.days, ...fdays], nPast = sn.snow7.length;
+  const W=300,H=110,pad=22,max=Math.max(6,...vals), bw=(W-pad)/vals.length;
   const ticks=[0,Math.round(max/2),Math.round(max)];
-  const lbl = sn.days.map(d=>new Date(d+"T12:00").toLocaleDateString("en-US",{weekday:"short"}));
-  return `<svg viewBox="0 0 ${W} ${H+16}" width="100%" role="img" aria-label="Daily snowfall, last 7 days">
+  const lbl = days.map(d=>new Date(d+"T12:00").toLocaleDateString("en-US",{weekday:"short"}).slice(0,vals.length>9?2:3));
+  return `<svg viewBox="0 0 ${W} ${H+16}" width="100%" role="img" aria-label="Daily snowfall, last 7 days and forecast">
     ${ticks.map(t=>{const y=H-(t/max)*(H-12);return `<line x1="${pad}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="0" y="${y+3}">${t}"</text>`}).join("")}
-    ${snow.map((s,i)=>{const h=(s/max)*(H-12),x=pad+i*bw+4;return `<rect x="${x}" y="${H-h}" width="${bw-8}" height="${h}" rx="2" fill="${i>=4?"var(--snow)":"var(--snow-soft)"}"/>${s>=0.5?`<text x="${x+(bw-8)/2}" y="${H-h-3}" text-anchor="middle">${Math.round(s)}</text>`:""}<text x="${x+(bw-8)/2}" y="${H+13}" text-anchor="middle">${lbl[i]}</text>`}).join("")}
+    ${vals.map((s,i)=>{const h=Math.max((s/max)*(H-12), i>=nPast?1:0),x=pad+i*bw+3,w=Math.max(4,bw-6),f=i>=nPast;
+      return `<rect class="${f?"fbar":"pbar"}" x="${x}" y="${H-h}" width="${w}" height="${h}" rx="2" fill="${f?"none":(i>=nPast-3?"var(--snow)":"var(--snow-soft)")}" ${f?'stroke="var(--snow)" stroke-dasharray="3 2"':""}/>${s>=0.5?`<text x="${x+w/2}" y="${H-h-3}" text-anchor="middle">${Math.round(s)}</text>`:""}<text x="${x+w/2}" y="${H+13}" text-anchor="middle">${lbl[i]}</text>`}).join("")}
   </svg>`;
 }
 function render(){
@@ -602,7 +646,7 @@ function render(){
   let rows = RESORTS.map(r=>{ if(routesFailed && !LIVE.drive[S.origin]) LIVE.drive[S.origin]=Object.fromEntries(RESORTS.map(x=>[x.id,x.fb])); return calc(r); });
   const maxScore = Math.max(0.01,...rows.map(r=>r.score));
   // key per sort; missing data always sinks to the bottom
-  const key = {name:r=>r.name, score:r=>r.score||null, cond:r=>r.cond?COND_RANK[r.cond]*1000+(r.h72||0):null, h24:r=>r.h24, fresh:r=>r.h72, drive:r=>r.drive, price:r=>r.cost}[S.sort] || (r=>r.score||null);
+  const key = {name:r=>r.name, score:r=>r.score||null, cond:r=>r.cond?COND_RANK[r.cond]*1000+(r.h72||0):null, h24:r=>r.h24, fresh:r=>r.h72, fc:r=>r.fx?.snow ?? null, drive:r=>r.drive, price:r=>r.cost}[S.sort] || (r=>r.score||null);
   const sign = S.dir==="asc"?1:-1;
   rows.sort((a,b)=>{ if(a.os.rank!==b.os.rank) return a.os.rank-b.os.rank; const x=key(a),y=key(b); if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1; return (typeof x==="string" ? x.localeCompare(y) : x-y)*sign || a.name.localeCompare(b.name);});
 
@@ -616,14 +660,14 @@ function render(){
   const from = document.getElementById("origin").selectedOptions[0].text.split(" /")[0];
   document.getElementById("best").innerHTML = top ? `
     <span class="tag">Best bet · ${sdl}</span>
-    <div class="name">${top.name} <span class="lift ${top.os.rank===0?"sched":"unk"}">${top.wk.label}</span><span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf&&top.conf.label==="Model only"?`<span class="conf low">Model only</span>`:""}${top.flag?`<span class="conf med">${top.flag}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}</div>
+    <div class="name">${top.name} <span class="lift ${top.os.rank===0?"sched":"unk"}">${top.wk.label}</span><span class="cond ${top.cond}">${COND[top.cond]}</span>${top.conf&&top.conf.label==="Model only"?`<span class="conf low">Model only</span>`:""}${top.flag?`<span class="conf med">${top.flag}</span>`:""}${top.rain?`<span class="rain" style="margin:0">Rain at base</span>`:""}${fxChips(top)}</div>
     <div class="stats">
       <div class="stat"><b class="fresh">${inch(top.h24)}</b><small>24h</small></div>
       <div class="stat"><b class="fresh">${inch(top.h72)}</b><small>72h</small></div>
       <div class="stat" data-route="${top.id}" role="button" tabindex="0" aria-label="Directions to ${top.name}"><b>${fmt(top.drive)}</b><small>${top.chain?`Drive R${top.chain}`:"Drive"} ›</small></div>
       <div class="stat">${top.covered?`<b class="onpass">On pass</b><small>${top.passes.filter(p=>S.owned.includes(p))[0]}</small>`:`<b>$${top.price}</b><small>Ticket</small>`}</div>
     </div>
-    <div class="links" style="grid-column:1/-1;margin:0"><a href="${liftUrl(top)}" target="_blank" rel="noopener">Lifts open</a><a href="${camUrl(top)}" target="_blank" rel="noopener">Webcams</a><a href="${ticketUrl(top)}" target="_blank" rel="noopener">${top.covered?"Resort site":"Buy tickets"}</a></div>`
+    <div class="links" style="grid-column:1/-1;margin:0"><a href="${liftUrl(top)}" target="_blank" rel="noopener">Lifts open</a><a href="${camUrl(top)}" target="_blank" rel="noopener">Webcams</a><a href="${windyUrl(top)}" target="_blank" rel="noopener">Windy</a><a href="${ticketUrl(top)}" target="_blank" rel="noopener">${top.covered?"Resort site":"Buy tickets"}</a></div>`
     : snowReady ? `<span class="tag">Best bet · ${sdl}</span><div class="why">Nothing is expected to be open by ${sdl}.${soonest?` Earliest: <b>${soonest.name}</b>, ${md(soonest.wk.opens)}.`:""}</div>`
     : `<span class="tag">Best bet</span><div class="why">Waiting for snow and route data…</div>`;
 
@@ -639,7 +683,7 @@ function render(){
     const condChip = r.cond ? `<span class="cond ${r.cond}">${COND[r.cond]}</span>` : `<span class="unk">${LIVE.feeds.snow==="err"?"no snow data":"loading"}</span>`;
     const confChip = (r.conf&&r.conf.label==="Model only" ? `<span class="conf low">Model only</span>` : "") + (r.flag ? `<span class="conf med">${r.flag}</span>` : "");
     return grp + `<button type="button" class="row ${S.owned.length && !r.covered?"dim":""}" data-id="${r.id}" aria-expanded="${open}">
-      <div class="c-name"><div class="rname">${r.name}</div><div class="rmeta"><span class="lift ${r.os.cls} m-only">${r.os.label}</span>${r.cond?`<span class="cond ${r.cond} m-only">${COND[r.cond]}</span>`:""}${r.rain?`<span class="rain m-only" style="margin:0">Rain</span>`:""}<span class="m-only">${confChip}</span>${r.score?`<span class="pass m-only">Worth ${r.score.toFixed(1)}</span>`:""}${r.passes.length?r.passes.map(p=>`<span class="pass ${S.owned.includes(p)?"own":""}">${p}</span>`).join(""):`<span class="pass">Independent</span>`}</div></div>
+      <div class="c-name"><div class="rname">${r.name}</div><div class="rmeta"><span class="lift ${r.os.cls} m-only">${r.os.label}</span>${fxChips(r)}${r.cond?`<span class="cond ${r.cond} m-only">${COND[r.cond]}</span>`:""}${r.rain?`<span class="rain m-only" style="margin:0">Rain</span>`:""}<span class="m-only">${confChip}</span>${r.score?`<span class="pass m-only">Worth ${r.score.toFixed(1)}</span>`:""}${r.passes.length?r.passes.map(p=>`<span class="pass ${S.owned.includes(p)?"own":""}">${p}</span>`).join(""):`<span class="pass">Independent</span>`}</div></div>
       <div class="c-cond"><span class="lift ${r.os.cls}">${r.os.label}</span><br>${condChip}${r.rain?`<br><span class="rain">Rain at base</span>`:""}<div style="margin-top:5px">${confChip}</div></div>
       <div class="num fresh cell c-24" data-l="24h">${inch(r.h24)}</div>
       <div class="num fresh cell c-72" data-l="72h">${inch(r.h72)}</div>
@@ -649,14 +693,16 @@ function render(){
       <span class="caret" aria-hidden="true">▸</span>
     </button>
     ${open?`<div class="detail">
-      <div><h3>Daily snowfall, last 7 days</h3>${r.sn?bars(r.sn):`<p class="unk">Snow data not loaded.</p>`}<div class="label" style="margin-top:6px">24h ${inch(r.h24)} · 72h ${inch(r.h72)} · dark bars = last 3 days</div></div>
+      <div><h3>Snowfall: last 7 days + forecast</h3>${r.sn?bars(r.sn):`<p class="unk">Snow data not loaded.</p>`}<div class="label" style="margin-top:6px">24h ${inch(r.h24)} · 72h ${inch(r.h72)} · solid = fallen · outlined = forecast to ${dowS()}</div>
+        ${r.fx?`<div class="obs" style="margin-top:10px"><b>${dowS()} (ski day):</b> +${r.fx.snow}" before 9 am${r.fx.gust!=null?` · gusts to ${r.fx.gust} mph`:""}${r.fx.lo!=null?` · ${r.fx.lo===r.fx.hi?r.fx.lo:`${r.fx.lo}–${r.fx.hi}`}°F`:""}${r.fx.gust>=WIND_HOLD?` · <b style="color:var(--bad)">upper lifts may close for wind</b>`:""}<div class="why">Weather model at mid-mountain; ridgetops are windier. Compare with Windy and the webcams.</div></div>`:`<div class="why" style="margin-top:8px">Ski day is past the 8-day forecast.</div>`}</div>
       <div><h3>Measured nearby</h3>${r.st && r.st.depth!=null ? `<div class="obs">
           <b>${r.st.depth}"</b> on the ground at <b>${r.st.name}</b>, ${Math.round(r.st.ft).toLocaleString()} ft, ${r.st.km} km away.<br>
           Depth change: <b>${r.st.d24==null?"—":(r.st.d24>0?"+":"")+r.st.d24+'"'}</b> 24h · <b>${r.st.d72==null?"—":(r.st.d72>0?"+":"")+r.st.d72+'"'}</b> 72h · reading ${r.st.date}</div>`
         : `<div class="obs">${LIVE.feeds.stations==="err"?"Station feed unavailable.":LIVE.stations?"No SNOTEL station within 30 km.":"Loading…"}</div>`}
-        <h3>Live from the mountain</h3><div class="links">
+        <h3>Check it yourself</h3><div class="links">
           <a href="${liftUrl(r)}" target="_blank" rel="noopener">Lifts open</a>
           <a href="${camUrl(r)}" target="_blank" rel="noopener">Webcams</a>
+          <a href="${windyUrl(r)}" target="_blank" rel="noopener">Windy</a>
           <a href="${ticketUrl(r)}" target="_blank" rel="noopener">Buy tickets</a>
           <a href="https://${SITES[r.id]}" target="_blank" rel="noopener">Resort site</a>
           ${r.st?`<a href="https://wcc.sc.egov.usda.gov/nwcc/site?sitenum=${r.st.id}" target="_blank" rel="noopener">Station data</a>`:""}

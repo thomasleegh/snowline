@@ -30,17 +30,22 @@ const BASE = `http://localhost:${server.address().port}/`;
 const NOW = Date.parse('2026-11-30T20:00:00Z');
 function meteo(n, mode){
   const hours = [], t0 = new Date(NOW - 7*864e5); t0.setUTCMinutes(0,0,0);
-  for(let i=0;i<24*9;i++) hours.push(new Date(t0.getTime()+i*3600e3-8*3600e3).toISOString().slice(0,13)+':00');
+  // 7 days back + 9 days of forecast; hour k=168 is NOW. Existing modes keep snow in the past (k<=168).
+  for(let i=0;i<24*16;i++) hours.push(new Date(t0.getTime()+i*3600e3-8*3600e3).toISOString().slice(0,13)+':00');
   const days = [...new Set(hours.map(h=>h.slice(0,10)))];
   return Array.from({length:n}, (_,i)=>({
     utc_offset_seconds:-28800,
-    hourly_units:{snowfall:'inch',snow_depth:'ft',precipitation:'inch',freezing_level_height:'m'},
+    hourly_units:{snowfall:'inch',snow_depth:'ft',precipitation:'inch',freezing_level_height:'m',wind_gusts_10m:'mp/h',temperature_2m:'°F'},
     daily_units:{snowfall_sum:'inch'},
     // mode 'dump': 0.3"/h everywhere for the last ~36 h, Mammoth (index 16) 1"/h — a big far-away storm
-    hourly:{time:hours, snowfall:hours.map((_,k)=>mode==='nosnow' ? 0 : mode==='dump' ? (k>140 ? (i===16?1:0.3) : 0) : (k>140?0.05*(i%4):0)), snow_depth:hours.map(()=>mode==='nosnow' ? 0 : 0.5+i*0.2),
+    // mode 'storm': no past snow; Kirkwood (index 9) gets 0.6"/h Thu Dec 3 – Fri Dec 4 (forecast); Palisades (0) gusts 55 mph Sat Dec 5
+    hourly:{time:hours, snowfall:hours.map((h,k)=>mode==='storm' ? (i===9 && h>='2026-12-03T00' && h<='2026-12-04T23' ? 0.6 : 0)
+        : k>168 ? 0 : mode==='nosnow' ? 0 : mode==='dump' ? (k>140 ? (i===16?1:0.3) : 0) : (k>140?0.05*(i%4):0)),
+      wind_gusts_10m:hours.map(h=>mode==='storm' && i===0 && h.startsWith('2026-12-05') ? 55 : 15),
+      temperature_2m:hours.map(()=>24), snow_depth:hours.map(()=>mode==='nosnow' ? 0 : 0.5+i*0.2),
       // resort 0 (Palisades) gets rain at the base: precip with a high freezing level
       precipitation:hours.map(()=>i===0?0.05:0), freezing_level_height:hours.map(()=>3000)},
-    daily:{time:days, snowfall_sum:days.map((_,k)=>mode==='nosnow' ? 0 : k>4?(i%4)*0.8:0)}
+    daily:{time:days, snowfall_sum:days.map((d,k)=>mode==='storm' ? (i===9 && (d==='2026-12-03'||d==='2026-12-04') ? 14.4 : 0) : d>'2026-11-30' ? 0 : mode==='nosnow' ? 0 : k>4?(i%4)*0.8:0)}
   }));
 }
 const STATIONS = [
@@ -236,6 +241,38 @@ await test('weekday departure targets the next weekday', async page => {
 await test('feeds blocked: opening dates still work', async page => {
   assert(/Opens Dec 26 \(projected\)/.test(await page.textContent('.row[data-id="dod"] .lift')), 'still shows projected dates');
 }, {mode:'blocked'});
+
+// ---------- forecast / Windy ----------
+await test('ski-day forecast: snow due before Sat shows on the card and wins Best bet (2026-11-13)', async page => {
+  // Kirkwood: nothing fallen yet, ~29" forecast Thu–Fri, opens Fri Dec 4 -> best bet for Sat Dec 5
+  const chip = await page.textContent('.row[data-id="kir"] .fcx');
+  assert(/\+\d+" by Sat/.test(chip), 'forecast chip: ' + chip);
+  assert(/Kirkwood/i.test(await page.textContent('.best .name')), 'best bet should be Kirkwood: ' + await page.textContent('.best .name'));
+}, {mode:'storm'});
+await test('ski-day wind: 45+ mph gusts flagged and cost Worth it', async page => {
+  const w = await page.textContent('.row[data-id="pal"] .wind');
+  assert(/Sat gusts 55 mph · lift holds likely/.test(w), 'wind chip: ' + w);
+  const calm = await page.evaluate(() => { const r = calc(RESORTS.find(x=>x.id==='pal')); return {fx:r.fx, score:r.score}; });
+  assert(calm.fx.gust === 55, 'gust parsed: ' + JSON.stringify(calm.fx));
+}, {mode:'storm'});
+await test('detail chart adds outlined forecast bars up to the ski day, plus a ski-day line', async page => {
+  await page.click('.row[data-id="kir"] .rname');
+  const n = await page.$$eval('.detail .fbar', e => e.length);
+  assert(n === 5, 'forecast bars Tue Dec 1 – Sat Dec 5 expected 5, got ' + n);
+  const t = await page.textContent('.detail');
+  assert(/Sat \(ski day\):/.test(t) && /gusts to 15 mph/.test(t) && /· 24°F/.test(t) && !/24–24/.test(t), t.slice(0,300));
+}, {mode:'storm'});
+await test('sort by snow by ski day', async page => {
+  await page.selectOption('#msort', 'fc');
+  if(!/High/.test(await page.textContent('#mdir'))) await page.click('#mdir');
+  assert(await page.getAttribute('.row[data-id]', 'data-id') === 'kir', 'Kirkwood (most forecast snow) should lead the open-by-schedule group');
+}, {mode:'storm', now: Date.parse('2026-12-04T20:00:00Z')});
+await test('Windy link on every resort and the Best bet opens the point forecast with snow layer', async page => {
+  await page.click('.row[data-id="dod"] .rname');
+  const href = await page.getAttribute('.detail a:has-text("Windy")', 'href');
+  assert(href === 'https://www.windy.com/38.182/-119.953?snow,38.182,-119.953,10', 'windy: ' + href);
+  assert(await page.$('.best .links a:has-text("Windy")'), 'Best bet should link Windy');
+});
 
 // ---------- directions ----------
 await test('tapping a drive time opens directions (Google + Apple Maps), not the card (2026-11-10)', async page => {

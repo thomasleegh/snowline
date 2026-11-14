@@ -14,12 +14,14 @@ Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right
 | What | Source | Live? | Notes |
 |---|---|---|---|
 | 24h/72h snowfall, 7-day chart, modeled base | Open-Meteo forecast API at each resort's mid-mountain elevation | yes | Model, not measured. Retries without rain fields if the API rejects them. |
+| Ski-day forecast | Same Open-Meteo call (8 forecast days, `wind_gusts_10m`, `temperature_2m`): snow from now to 9 am on the ski day, gusts/temps 8 am–4 pm | yes | Mid-mountain model; ridgetops windier. |
 | Rain at base | Open-Meteo freezing level − 300 m vs `baseElev`, next 24h with precip | yes | Rule of thumb. |
 | Measured snow depth (+ "Model only" flag when no station) | NRCS SNOTEL (`awdbRestApi/services/v1`), nearest station within 30 km | yes | Kirkwood, Bear Valley, Dodge Ridge, Mammoth usually have none → "Model only". CDEC stations would fill that gap. |
 | Drive time | OSRM public router × departure factor + chain delay | yes | Traffic factor is a guess. Mammoth routed via Minden (Tioga closed in winter). |
 | Open / closed | `opens` = 2026-27 announced/projected opening day (all 19); past it = "Open (scheduled)" | no | Not live. Liftie was tried (Build 11–12) but returns HTTP 403 to requests via the Netlify proxy and has no CORS, so it was removed (2026-11-08). Live counts: the Lifts open link. |
 | Chain controls | Caltrans CWWP2 D3/D10 JSON | yes | Parser is defensive, format not fully verified. |
 | Ticket prices | hardcoded `price`; `ps:"listed"` = OnTheSnow weekday adult 2026-27, else estimate | no | Weekends cost more. |
+| Windy | link `windy.com/<lat>/<lon>?snow,<lat>,<lon>,10` (point forecast + snow layer) | — | Link out. |
 | Webcams / lift status / tickets | `cam` = OpenSnow slug: `/location/<slug>/cams` and `/snow-report` (lifts open in season + link to the resort's official terrain status); `ticket` deep link or `SITES` domain | — | Links out; cams can't be embedded reliably. |
 | Pass coverage | hardcoded `passes` | no | 2026-27 lineups (verified 2026-11-01): Palisades is NOT on Mountain Collective; Indy = Bear Valley, Dodge Ridge, China Peak, Donner Ski Ranch, Mt. Shasta; Cali Pass = Bear Valley, Dodge Ridge, China Peak. Recheck each season. |
 
@@ -35,6 +37,7 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 ## User decisions
 - 2026-11-03: Best bet = highest Worth it among resorts open by the ski day (Fri 3 pm / Sat 5 am → coming Saturday; Weekday AM → next weekday), ties (e.g. no snow anywhere) → shortest drive. If none: "Nothing is expected to be open by <day>. Earliest: X".
 - 2026-11-10: tapping a drive time (card, Best bet tile, detail "Directions") opens a sheet with Google Maps / Apple Maps links, start = the phone's current location (no origin in the link), destination = resort searched by name (`DEST`), so Maps routes to the real lot. Coordinates snapped to a random street address / off-road point (2026-11-10). Tapping the rest of the card still expands it.
+- 2026-11-13: Worth it = (24h×2 + 72h×2 + snow forecast before 9 am ski day ×2 + base/10) ÷ drive hours × pass × drive factor × wind factor (gusts 35+ ×0.85, 45+ ×0.6). Cards show "+N\" by Sat" and wind chips; detail chart adds outlined forecast bars to the ski day. "Check it yourself": Lifts open · Webcams · Windy.
 - 2026-11-03: long drives penalized in Worth it: ×1 up to 4 h, sliding to ×0.25 at 7 h+.
 - 2026-11-03: open resorts sort to the top, not-yet-open to the bottom, under every sort.
 
