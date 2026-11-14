@@ -1,0 +1,7 @@
+# Cloudflare Pages (and Netlify) header rules: phones must always get the newest page and service worker.
+/sw.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache

@@ -8,13 +8,13 @@ Personal PWA: which Sierra ski resort is worth the drive from the Bay Area right
 - `_redirects`: `/proxy/awdb/*` → NRCS SNOTEL API, so station data is fetched server-side by Netlify (no CORS). The app falls back to calling the API directly when the proxy isn't there (local file, other hosts).
 - `netlify.toml`: publish dir = repo root; `sw.js` and `index.html` served no-cache.
 - `scripts/e2e.mjs`: browser regression suite (Playwright, 390×844, all feeds mocked, clock fixed at 2026-11-30 so open/closed results don't drift).
-- Deploy: Netlify site **https://steady-kringle-e64fbc.netlify.app** (linked to this repo), auto-deploy on push to `main`. An older Netlify Drop site from the zip days does not update; the phone should use the steady-kringle one. Same URL = same localStorage (passes, origin, sort survive).
+- Deploy: Netlify site linked to this repo (name not recorded yet), auto-deploy on push to `main`. **steady-kringle-e64fbc.netlify.app is the OLD Netlify Drop site (Nov 1) — frozen, not this repo.** 2026-11-13: Netlify paused production deploys (free plan: 300 credits/mo, 15 per deploy), so pushes stopped going live after Build 16. Moving to Cloudflare Pages is prepared: `functions/proxy/awdb/[[path]].js` replaces the `_redirects` proxy there (`node scripts/test-function.mjs`), `_headers` sets no-cache. Same URL = same localStorage.
 
 ## Data sources
 | What | Source | Live? | Notes |
 |---|---|---|---|
-| 24h/72h snowfall, 7-day chart, modeled base | Open-Meteo forecast API at each resort's mid-mountain elevation | yes | Model, not measured. Retries without rain fields if the API rejects them. |
-| Ski-day forecast | Same Open-Meteo call (8 forecast days, `wind_gusts_10m`, `temperature_2m`): snow from now to 9 am on the ski day, gusts/temps 8 am–4 pm | yes | Mid-mountain model; ridgetops windier. |
+| 24h/72h snowfall, 7-day chart, modeled base | Open-Meteo, two calls: hourly (past 3 + 3 days) and daily (past 6 + 8 days), 30 s timeout each | yes | Model, not measured. Retries hourly without rain fields if rejected. A failed refresh keeps the last good copy (≤2 days) and says "update failed … showing data from …". |
+| Ski-day forecast | Snow from now to 9 am on the ski day (hourly where covered, then whole days from daily); ski day's max gust and min/max temp from daily | yes | Mid-mountain model; ridgetops windier. |
 | Rain at base | Open-Meteo freezing level − 300 m vs `baseElev`, next 24h with precip | yes | Rule of thumb. |
 | Measured snow depth (+ "Model only" flag when no station) | NRCS SNOTEL (`awdbRestApi/services/v1`), nearest station within 30 km | yes | Kirkwood, Bear Valley, Dodge Ridge, Mammoth usually have none → "Model only". CDEC stations would fill that gap. |
 | Drive time | OSRM public router × departure factor + chain delay | yes | Traffic factor is a guess. Mammoth routed via Minden (Tioga closed in winter). |
@@ -52,6 +52,8 @@ Feeds cache 30 min in localStorage; Refresh forces a reload. The status bar show
 - Phone list "jumbled": each row was its own grid with `auto` columns, so stats didn't line up. Phone cards now use fixed `repeat(4,1fr)` with grid areas.
 - Worth-it column unreachable on phone → sort bar (`#msort`, `#mdir`) under 760px.
 - Best-bet labels truncated ("DAY TIC…") → short labels.
+- Build 16 weather request (19 resorts × 14 days × 6 hourly vars) timed out on the phone → split into hourly + daily calls, 30 s timeout, stale-copy fallback. With no snow data a chip printed "undefined" → chips render only when set.
+- Best-bet drive tile label "Drive R2 ›" truncated → label is "Drive ›", chains show as an "R2 chains" chip by the name.
 - Best bet stuck on "Waiting for snow and route data…" when no resort had snow (all scores 0): readiness now = snow + route feeds answered, not score > 0.
 - Drive time broke across lines ("3h / 52") next to a chain chip → `.dt` nowrap + a space before the chip so the chip wraps instead.
 

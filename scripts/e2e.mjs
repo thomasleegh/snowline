@@ -45,7 +45,8 @@ function meteo(n, mode){
       temperature_2m:hours.map(()=>24), snow_depth:hours.map(()=>mode==='nosnow' ? 0 : 0.5+i*0.2),
       // resort 0 (Palisades) gets rain at the base: precip with a high freezing level
       precipitation:hours.map(()=>i===0?0.05:0), freezing_level_height:hours.map(()=>3000)},
-    daily:{time:days, snowfall_sum:days.map((d,k)=>mode==='storm' ? (i===9 && (d==='2026-12-03'||d==='2026-12-04') ? 14.4 : 0) : d>'2026-11-30' ? 0 : mode==='nosnow' ? 0 : k>4?(i%4)*0.8:0)}
+    daily:{time:days, wind_gusts_10m_max:days.map(d=>mode==='storm' && i===0 && d==='2026-12-05' ? 55 : 15),
+      temperature_2m_max:days.map(()=>24), temperature_2m_min:days.map(()=>24), snowfall_sum:days.map((d,k)=>mode==='storm' ? (i===9 && (d==='2026-12-03'||d==='2026-12-04') ? 14.4 : 0) : d>'2026-11-30' ? 0 : mode==='nosnow' ? 0 : k>4?(i%4)*0.8:0)}
   }));
 }
 const STATIONS = [
@@ -66,6 +67,7 @@ async function mockFeeds(page, mode='ok'){
     const u = route.request().url();
     const J = (o, status=200) => route.fulfill({status, contentType:'application/json', headers:{'access-control-allow-origin':'*'}, body:JSON.stringify(o)});
     if(mode==='blocked') return route.abort('failed');
+    if(u.includes('open-meteo') && mode==='nometeo') return route.abort('timedout');
     if(u.includes('open-meteo')){
       if(mode==='om400' && u.includes('freezing_level_height')) return J({error:true, reason:'invalid variable'}, 400);
       return J(meteo(new URL(u).searchParams.get('latitude').split(',').length, mode));
@@ -253,9 +255,12 @@ await test('status bar shows the site address with Copy link on https (2026-11-1
   await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin: HOST.slice(0,-1)});
   await page.goto(HOST);
   await page.waitForSelector('#copyLink');
+  await page.waitForFunction(() => !document.querySelector('.feed.load'));   // status bar redraws as feeds land
   assert(/snowline-test\.netlify\.app/.test(await page.textContent('#siteUrl')), 'address shown: ' + await page.textContent('#siteUrl'));
   await page.click('#copyLink');
-  assert(/Copied|Selected/.test(await page.textContent('#copyLink')), 'button feedback: ' + await page.textContent('#copyLink'));
+  // the label changes once the clipboard promise settles
+  const fb = await page.waitForFunction(() => /Copied|Selected/.test(document.getElementById('copyLink')?.textContent||''), null, {timeout:3000}).then(()=>true, ()=>false);
+  assert(fb, 'button feedback: ' + await page.textContent('#copyLink'));
   const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''));
   assert(clip === '' || clip === HOST, 'clipboard: ' + clip);
 });
@@ -290,6 +295,41 @@ await test('Windy link on every resort and the Best bet opens the point forecast
   const href = await page.getAttribute('.detail a:has-text("Windy")', 'href');
   assert(href === 'https://www.windy.com/38.182/-119.953?snow,38.182,-119.953,10', 'windy: ' + href);
   assert(await page.$('.best .links a:has-text("Windy")'), 'Best bet should link Windy');
+});
+
+// ---------- weather resilience (2026-11-13: 'Snow unavailable (timed out)', 'UNDEFINED' chip) ----------
+await test('weather comes in two small requests (hourly 3+3 days, daily 6+8 days), not one big one', async page => {
+  const urls = [];
+  page.on('request', r => { if(r.url().includes('open-meteo')) urls.push(r.url()); });
+  await page.click('#refresh');
+  await page.waitForFunction(() => !document.querySelector('.feed.load'));
+  assert(urls.length === 2, 'expected 2 Open-Meteo requests, got ' + urls.length);
+  const h = urls.find(u => u.includes('hourly=')), d = urls.find(u => u.includes('daily='));
+  assert(h && /past_days=3/.test(h) && /forecast_days=3/.test(h) && !/daily=/.test(h), 'hourly request: ' + h);
+  assert(d && /past_days=6/.test(d) && /forecast_days=8/.test(d) && !/hourly=/.test(d), 'daily request: ' + d);
+});
+await test('a failed weather refresh keeps the last good data and says so', async page => {
+  const before = await page.textContent('.row[data-id="nst"] .c-72');
+  await page.route('**/api.open-meteo.com/**', r => r.abort('timedout'));
+  await page.click('#refresh');
+  await page.waitForFunction(() => !document.querySelector('.feed.load'));
+  const feed = await page.textContent('.feed:has-text("Snow")');
+  assert(/update failed/.test(feed) && /showing data from/.test(feed), 'status: ' + feed);
+  assert(await page.textContent('.row[data-id="nst"] .c-72') === before, '72h should keep the saved value ' + before);
+});
+await test('no snow data at all: no "undefined" chip anywhere, Best bet still answers', async page => {
+  const body = await page.evaluate(() => document.body.innerText);   // visible text only, not the script source
+  assert(!/undefined/i.test(body), 'found "undefined" on the page');
+  assert(/Best bet ·/.test(await page.textContent('.best .tag')), 'best bet tag: ' + await page.textContent('.best .tag'));
+}, {mode:'nometeo'});
+await test('Best bet drive tile label stays short; chains show as a chip (2026-11-13 "DRIVE R…")', async page => {
+  const labels = await page.$$eval('.best .stat small', els => els.map(e => [e.textContent, e.scrollWidth > e.clientWidth + 1]));
+  assert(labels.every(([,clip]) => !clip), 'clipped: ' + JSON.stringify(labels));
+  assert(labels.some(([t]) => t === 'Drive ›'), 'drive label: ' + JSON.stringify(labels));
+  // force an I-80 best bet to check the chain chip: Sugar Bowl/Boreal/Palisades etc. are I-80 with R2 in the mock
+  const name = await page.textContent('.best .name');
+  const id = await page.evaluate(n => RESORTS.find(r => n.toUpperCase().includes(r.name.toUpperCase()))?.corr, name);
+  if(id === 'I80') assert(/R2 chains/.test(name), 'chain chip missing: ' + name);
 });
 
 // ---------- directions ----------

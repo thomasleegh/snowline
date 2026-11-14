@@ -1,0 +1,20 @@
+// Unit check for the Cloudflare proxy function: node scripts/test-function.mjs
+import { onRequest } from "../functions/proxy/awdb/[[path]].js";
+let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log("FAIL " + m); } else console.log("ok   " + m); };
+const calls = [];
+globalThis.fetch = async (url, init) => { calls.push({ url, init }); return new Response('[{"x":1}]', { status: 200, headers: { "Content-Type": "application/json" } }); };
+const req = (u, m = "GET") => new Request("https://snowline.pages.dev" + u, { method: m });
+let r = await onRequest({ request: req("/proxy/awdb/data?stationTriplets=784:CA:SNTL&elements=SNWD"), params: { path: ["data"] } });
+ok(r.status === 200 && (await r.text()) === '[{"x":1}]', "passes the body and status through");
+ok(calls[0].url === "https://wcc.sc.egov.usda.gov/awdbRestApi/services/v1/data?stationTriplets=784:CA:SNTL&elements=SNWD", "keeps the query string: " + calls[0].url);
+ok(r.headers.get("Cache-Control") === "public, max-age=900", "caches 15 min");
+r = await onRequest({ request: req("/proxy/awdb/stations?stationTriplets=*:CA:SNTL"), params: { path: ["stations"] } });
+ok(r.status === 200, "stations endpoint allowed");
+r = await onRequest({ request: req("/proxy/awdb/../../etc"), params: { path: ["..", "..", "etc"] } });
+ok(r.status === 404, "only stations/data are proxied");
+r = await onRequest({ request: req("/proxy/awdb/data", "POST"), params: { path: ["data"] } });
+ok(r.status === 405, "GET only");
+globalThis.fetch = async () => { throw new Error("down"); };
+r = await onRequest({ request: req("/proxy/awdb/data"), params: { path: ["data"] } });
+ok(r.status === 502, "upstream down -> 502 (app then falls back to calling NRCS directly)");
+console.log(fails ? `\n${fails} FAILED` : "\nall passed"); process.exit(fails ? 1 : 0);
